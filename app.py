@@ -1537,9 +1537,9 @@ HOW_TO_USE = {
         "title": "Organization Development & HCM",
         "subtitle": "OD & HCM Strategy Form",
         "steps": [
-            "Choose one of the two modules below: <b>Shift Ratio</b> to edit shift "
-            "ratios, or <b>Mechanic Observation</b> to record a new observation.",
-            "In <b>Shift Ratio</b>, all three sites (BCP, ACP, KCP) are shown at once "
+            "Choose one of the two modules below: <b>Ratio Manpower</b> to edit ratio "
+            "manpower, or <b>Mechanic Observation</b> to record a new observation.",
+            "In <b>Ratio Manpower</b>, all sites (BCP, ACP, KCP) are shown at once "
             "with their current ratio — update the value for any site and click "
             "<b>Save</b> to write it directly to the BACKEND sheet.",
             "In <b>Mechanic Observation</b>, fill in the observation details and "
