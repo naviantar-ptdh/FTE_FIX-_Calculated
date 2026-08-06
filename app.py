@@ -1534,7 +1534,7 @@ CALCULATOR_CARD = {
 # panel panjang berisi ketiganya.
 HOW_TO_USE = {
     "hcm": {
-        "title": "1. Organization Development & HCM",
+        "title": "Organization Development & HCM",
         "subtitle": "OD & HCM Strategy Form",
         "steps": [
             "Choose one of the two modules below: <b>Shift Ratio</b> to edit shift "
@@ -1548,7 +1548,7 @@ HOW_TO_USE = {
         ],
     },
     "engineer": {
-        "title": "2. Engineer Form",
+        "title": "Engineer Form",
         "subtitle": "Load Factor Data Editor",
         "steps": [
             "Click one of the three site cards below (KCP, ACP, or BCP) to open that "
@@ -1565,7 +1565,7 @@ HOW_TO_USE = {
         ],
     },
     "plant": {
-        "title": "3. Plant & Maintenance",
+        "title": "Plant & Maintenance",
         "subtitle": "Technical Competency Factor",
         "steps": [
             "All three sites (BCP, ACP, KCP) are shown below with their current "
