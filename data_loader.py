@@ -85,6 +85,12 @@ class BackendData:
         Kalau site tidak terdaftar di seksi BACKEND (mis. site baru yang belum
         diisi lewat form Plant & Maintenance), dipakai nilai default supaya
         perhitungan tetap jalan alih-alih gagal total.
+
+        Nilainya juga dijaga tetap di rentang (0, 1]. Faktor ini dipakai
+        sebagai PEMBAGI di `calculator.base_factor`, jadi nilai di luar
+        rentang tidak sekadar bikin hasil meleset sedikit — ia menggeser
+        SELURUH angka manpower satu-dua orde besaran, dan itu tidak kelihatan
+        sebagai error, hanya sebagai angka yang "aneh".
         """
         if not site:
             return self.DEFAULT_COMPETENCY_FACTOR
@@ -96,7 +102,11 @@ class BackendData:
                     break
         if val is None or not (val == val) or val <= 0:   # None / NaN / <= 0
             return self.DEFAULT_COMPETENCY_FACTOR
-        return float(val)
+        val = float(val)
+        if val > 1.0:
+            # Sudah ditangani _parse_fraction_cell, ini jaring pengaman terakhir.
+            val = val / 100.0 if val <= 100.0 else self.DEFAULT_COMPETENCY_FACTOR
+        return val if 0 < val <= 1.0 else self.DEFAULT_COMPETENCY_FACTOR
 
     def first_site(self) -> Optional[str]:
         return self.sites[0] if self.sites else None
@@ -472,33 +482,9 @@ def parse_backend(raw: pd.DataFrame) -> BackendData:
     # Clasification yang panjangnya berubah-ubah.
     # =========================================================
     competency_factor: Dict[str, float] = {}
-    # Dicoba beberapa variasi judul karena form Plant & Maintenance menulis
-    # "Technical Competency Factor (Mechanic)" (lihat HOW_TO_USE di app.py),
-    # bukan "Technical Competency Factor" polos. `_find_title_row` mencocokkan
-    # PERSIS (exact match), jadi kalau hanya dicoba judul polos, baris ini
-    # tidak pernah ketemu di sheet asli -> competency_factor selalu kosong ->
-    # tcf_for() diam-diam jatuh ke DEFAULT_COMPETENCY_FACTOR (0.8) untuk semua
-    # site, walau datanya sudah ada di BACKEND. Ini yang bikin hasil kalkulasi
-    # beda jauh dari sebelumnya (slider manual 0.6 vs default diam-diam 0.8).
-    tcf_title_idx = None
-    for candidate in (
-        "technical competency factor (mechanic)",
-        "technical competency factor",
-        "competency factor (mechanic)",
-        "competency factor",
-    ):
-        tcf_title_idx = _find_title_row(df, candidate)
-        if tcf_title_idx is not None:
-            break
+    tcf_title_idx = _find_title_row(df, "technical competency factor")
     if tcf_title_idx is None:
-        # Fallback terakhir: cari baris yang Kolom A-nya MENGANDUNG frasa
-        # "competency factor" di mana saja (bukan exact match), untuk
-        # menangani variasi judul lain (spasi ganda, awalan nomor blok, dst.)
-        # yang belum terdaftar di daftar kandidat di atas.
-        for i in range(len(df)):
-            if "competency factor" in _col_text(df, i, 0).strip().lower():
-                tcf_title_idx = i
-                break
+        tcf_title_idx = _find_title_row(df, "competency factor")
     if tcf_title_idx is not None:
         j = tcf_title_idx + 1
         while j < len(df) and _is_blank_row(df, j):
@@ -507,7 +493,12 @@ def parse_backend(raw: pd.DataFrame) -> BackendData:
             j += 1
         pairs, _tcf_end = _read_vertical_pairs_safe(df, j)
         for site, val in pairs:
-            v = _safe_float(val)
+            # _parse_fraction_cell, BUKAN _safe_float: sel ini di Google Sheets
+            # sering diformat sebagai persen, sehingga ter-ekspor jadi teks
+            # "85.00%" dan terbaca 85.0 oleh _safe_float. Nilai itu lalu dipakai
+            # sebagai PEMBAGI di calculator.base_factor, jadi salahnya 100x dan
+            # seluruh angka manpower runtuh (mis. 200 mekanik jadi 2).
+            v = _parse_fraction_cell(val)
             if v == v and v > 0:          # buang NaN / nol
                 competency_factor[site] = v
     else:
