@@ -213,6 +213,11 @@ def icon_svg(name: str, size: int = 16, color: str | None = None) -> str:
 def inject_css():
     import streamlit as st
 
+    # Ikon "i" dipakai sebagai background-image tombol popover: Streamlit tidak
+    # mengizinkan elemen <img> di dalam label tombol, jadi labelnya dikosongkan
+    # dan ikonnya digambar lewat CSS.
+    info_uri = image_uri("info.png") or ""
+
     st.markdown(
         f"""
         <style>
@@ -1035,7 +1040,6 @@ def inject_css():
             box-shadow: 0 6px 16px -7px rgba(217,78,0,.65);
         }}
         div[class*="st-key-go_calc"] button:hover {{ color: #fff !important; }}
-        div[class*="st-key-how_to"] {{ margin-top: 46px; }}
         div[class*="st-key-how_to"] button {{
             border-radius: 11px !important; height: 44px; font-weight: 700 !important;
             border: 1px solid {NEUTRAL['border']} !important;
@@ -1110,22 +1114,40 @@ def inject_css():
             overflow: hidden; text-overflow: ellipsis;
         }}
 
-        /* tombol "!" penjelasan parameter — duduk di ujung kanan baris label */
-        div[class*="st-key-help_"] {{ display: flex; justify-content: flex-end; }}
-        div[class*="st-key-help_"] button {{
-            min-height: 0 !important; height: 21px !important; width: 26px !important;
+        /* ---- Tombol info (ikon "i") ----------------------------------
+           Dipakai dua tempat: pojok kanan-atas kartu departemen di landing
+           page, dan ujung kanan baris label parameter di mode Calculator.
+           Label tombol dikosongkan; ikonnya digambar sebagai background. */
+        div[class*="st-key-help_"] button,
+        div[class*="st-key-info_"] button {{
+            min-height: 0 !important; height: 26px !important; width: 26px !important;
             padding: 0 !important; border-radius: 999px !important;
-            font-weight: 900 !important; font-size: 11px !important;
-            background: {tint(BRAND['orange'], .88)} !important;
-            color: {BRAND['orange_deep']} !important;
-            border: 1px solid {tint(BRAND['orange'], .72)} !important;
+            border: none !important; background: transparent !important;
+            background-image: url("{info_uri}") !important;
+            background-size: 20px 20px !important;
+            background-position: center !important;
+            background-repeat: no-repeat !important;
+            opacity: .8; transition: opacity .15s ease, transform .15s ease;
+            color: transparent !important; font-size: 0 !important;
+            box-shadow: none !important;
         }}
-        div[class*="st-key-help_"] button svg {{ display: none !important; }}
-        div[class*="st-key-help_"] button > div {{ gap: 0 !important; }}
-        div[class*="st-key-help_"] button:hover {{
-            background: {tint(BRAND['orange'], .78)} !important;
+        div[class*="st-key-help_"] button:hover,
+        div[class*="st-key-info_"] button:hover {{
+            opacity: 1; transform: scale(1.12); background-color: transparent !important;
         }}
+        /* chevron bawaan popover disembunyikan supaya yang tampil hanya ikonnya */
+        div[class*="st-key-help_"] button svg,
+        div[class*="st-key-info_"] button svg {{ display: none !important; }}
+        div[class*="st-key-help_"] button > div,
+        div[class*="st-key-info_"] button > div {{ gap: 0 !important; }}
 
+        div[class*="st-key-help_"] {{ display: flex; justify-content: flex-end; }}
+
+        /* kartu departemen jadi jangkar posisi untuk ikon info di pojoknya */
+        div[class*="st-key-dept_"] {{ position: relative; }}
+        div[class*="st-key-info_"] {{
+            position: absolute; top: 14px; right: 12px; width: 30px; z-index: 6;
+        }}
         /* tanda seru kecil di sebelah label parameter */
         .dh-info {{
             display: inline-flex; align-items: center; justify-content: center;
