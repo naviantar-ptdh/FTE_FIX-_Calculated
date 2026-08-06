@@ -1623,22 +1623,6 @@ def render_landing():
             st.session_state.page = "calc"
             st.rerun()
 
-    st.write("")
-    st.markdown(theme.landing_divider("Then run the calculation"),
-                unsafe_allow_html=True)
-
-    d = CALCULATOR_CARD
-    st.markdown(
-        theme.choice_card(theme.image_uri(d["icon"]), d["title"], d["desc"],
-                          d["fills"], d["accent"], d["wash"], wide=True),
-        unsafe_allow_html=True,
-    )
-    with st.container(key="go_calc"):
-        if st.button("Open calculator", width="stretch", key="btn_go_calc",
-                     type="primary"):
-            st.session_state.page = "calc"
-            st.rerun()
-
 
 def render_embed_page(key: str):
     """A form page that should not look like an embed.
