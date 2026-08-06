@@ -947,6 +947,23 @@ def render_cost(summary: dict, cost: dict, staff: dict):
 
     e, f = st.columns(2, gap="small")
     with e:
+        cpm = rp_short(grand_cost / grand_head if grand_head else 0)
+        with theme.card("total_cost", f"Total cost · {suffix}",
+                        f"{cpm} per MPP · follows the period filter",
+                        accent=theme.BRAND["orange_deep"]):
+            st.markdown(
+                theme.table_html(
+                    ["Level", f"Total cost {suffix}"],
+                    _breakdown(
+                        ns_total, list(ns_cost_role.items()),
+                        st_total, [(r, st_cost_role[r]) for r in STAFF_ROLES],
+                        rp_short,
+                    ),
+                    total_row=["TOTAL", rp_short(grand_cost)], total_col=1,
+                ),
+                unsafe_allow_html=True,
+            )
+    with f:
         # Slot ini dulunya tabel Total Headcount — tabel itu sudah pindah ke
         # section Summary di atas, jadi diisi sebaran Non-Staff vs Staff yang
         # sebelumnya hanya berupa dua baris persentase di bawah tabel.
@@ -969,23 +986,6 @@ def render_cost(summary: dict, cost: dict, staff: dict):
                      f"{num(v / grand_cost * 100, 1)}%" if grand_cost else "0%")
                     for lbl, v, c_ in parts_split if v > 0
                 ]),
-                unsafe_allow_html=True,
-            )
-    with f:
-        cpm = rp_short(grand_cost / grand_head if grand_head else 0)
-        with theme.card("total_cost", f"Total cost · {suffix}",
-                        f"{cpm} per MPP · follows the period filter",
-                        accent=theme.BRAND["orange_deep"]):
-            st.markdown(
-                theme.table_html(
-                    ["Level", f"Total cost {suffix}"],
-                    _breakdown(
-                        ns_total, list(ns_cost_role.items()),
-                        st_total, [(r, st_cost_role[r]) for r in STAFF_ROLES],
-                        rp_short,
-                    ),
-                    total_row=["TOTAL", rp_short(grand_cost)], total_col=1,
-                ),
                 unsafe_allow_html=True,
             )
 
@@ -1091,7 +1091,7 @@ def render_calculator_mode(backend):
             st.markdown(f'<div class="dh-plabel">{text}</div>', unsafe_allow_html=True)
         with hlp:
             with st.container(key=f"help_{key}"):
-                with st.popover("！", width="stretch"):
+                with st.popover("i", width="content"):
                     st.markdown(f"**{title}**")
                     st.markdown(body)
 
@@ -1529,11 +1529,11 @@ CALCULATOR_CARD = {
     "fills": "Reads everything the three forms above write into BACKEND.",
 }
 
-# Isi panel "How to use" pada landing page. Disimpan sebagai data, bukan
-# ditempel langsung di fungsi render, supaya teksnya gampang disunting tanpa
-# menyentuh layout.
-HOW_TO_USE = [
-    {
+# Panduan per departemen. Di-key sesuai `DIRECTORATES` supaya tiap kartu
+# memunculkan panduannya sendiri lewat ikon info di pojoknya, bukan satu
+# panel panjang berisi ketiganya.
+HOW_TO_USE = {
+    "hcm": {
         "title": "1. Organization Development & HCM",
         "subtitle": "OD & HCM Strategy Form",
         "steps": [
@@ -1547,7 +1547,7 @@ HOW_TO_USE = [
             "correct sheet based on the selected site.",
         ],
     },
-    {
+    "engineer": {
         "title": "2. Engineer Form",
         "subtitle": "Load Factor Data Editor",
         "steps": [
@@ -1564,7 +1564,7 @@ HOW_TO_USE = [
             "type for the selected site.",
         ],
     },
-    {
+    "plant": {
         "title": "3. Plant & Maintenance",
         "subtitle": "Technical Competency Factor",
         "steps": [
@@ -1573,40 +1573,55 @@ HOW_TO_USE = [
             "site and click <b>Save</b> to write it directly to the BACKEND sheet.",
         ],
     },
-]
+}
 
 
 def render_landing():
-    head = st.columns([6, 1], gap="small")
-    with head[0]:
-        st.markdown(
-            theme.hero(theme.image_uri("logo_putih (2).png"),
-                       "PT Darma Henwa · Workforce Planning",
-                       "Manpower Planning Workspace"),
-            unsafe_allow_html=True,
-        )
-    with head[1]:
-        # Panduan disembunyikan di balik tombol "!" supaya landing page tetap
-        # ringkas; isinya panjang dan hanya dibutuhkan saat pertama kali pakai.
-        with st.container(key="how_to"):
-            with st.popover("！ How to use", width="stretch"):
-                st.markdown(theme.how_to_use(HOW_TO_USE), unsafe_allow_html=True)
-
+    st.markdown(
+        theme.hero(theme.image_uri("logo_putih (2).png"),
+                   "PT Darma Henwa · Workforce Planning",
+                   "Manpower Planning Workspace"),
+        unsafe_allow_html=True,
+    )
     st.write("")
 
     cols = st.columns(3, gap="medium")
     for col, key in zip(cols, ("engineer", "hcm", "plant")):
         d = DIRECTORATES[key]
         with col:
-            st.markdown(
-                theme.choice_card(theme.image_uri(d["icon"]), d["title"],
-                                  d["desc"], d["fills"], d["accent"], d["wash"]),
-                unsafe_allow_html=True,
-            )
+            # Kartu + ikon info dibungkus satu container: container inilah yang
+            # jadi jangkar `position: relative`, sehingga ikonnya bisa duduk
+            # tepat di pojok kanan-atas kartu, bukan mengambang di bawahnya.
+            with st.container(key=f"dept_{key}"):
+                st.markdown(
+                    theme.choice_card(theme.image_uri(d["icon"]), d["title"],
+                                      d["desc"], d["fills"], d["accent"], d["wash"]),
+                    unsafe_allow_html=True,
+                )
+                with st.container(key=f"info_{key}"):
+                    with st.popover("i", width="content"):
+                        guide = HOW_TO_USE[key]
+                        st.markdown(theme.how_to_use([guide]), unsafe_allow_html=True)
             with st.container(key=f"go_{key}"):
                 if st.button("Open form", width="stretch", key=f"btn_go_{key}"):
                     st.session_state.page = key
                     st.rerun()
+
+    st.write("")
+    st.markdown(theme.landing_divider("Then run the calculation"),
+                unsafe_allow_html=True)
+
+    d = CALCULATOR_CARD
+    st.markdown(
+        theme.choice_card(theme.image_uri(d["icon"]), d["title"], d["desc"],
+                          d["fills"], d["accent"], d["wash"], wide=True),
+        unsafe_allow_html=True,
+    )
+    with st.container(key="go_calc"):
+        if st.button("Open calculator", width="stretch", key="btn_go_calc",
+                     type="primary"):
+            st.session_state.page = "calc"
+            st.rerun()
 
     st.write("")
     st.markdown(theme.landing_divider("Then run the calculation"),
