@@ -1079,8 +1079,8 @@ def render_calculator_mode(backend):
 
     # ---------------- Parameter: satu kartu MELEBAR penuh ----------------
     # Empat input utama berjajar dalam satu baris, technical competency factor
-    # di baris sendiri (butuh lebar untuk track slider), lalu catatan jarak +
-    # tombol. Hasil perhitungan menyusul DI BAWAH kartu ini, bukan di sampingnya.
+    # ditampilkan dari BACKEND pada baris sendiri, lalu catatan jarak + tombol.
+    # Hasil perhitungan menyusul DI BAWAH kartu ini, bukan di sampingnya.
     #
     # Tiap parameter diberi tombol "!" berisi penjelasan singkat: istilah di
     # sini (PA, competency factor, sub category) tidak berarti sama bagi semua
@@ -1088,7 +1088,7 @@ def render_calculator_mode(backend):
     # tetap akan membuat kartu parameter jadi padat.
     def param_help(key: str, title: str, body: str):
         with st.container(key=f"help_{key}"):
-            with st.popover("！", width="content"):
+            with st.popover("!", width="content"):
                 st.markdown(f"**{title}**")
                 st.markdown(body)
 
@@ -1131,16 +1131,24 @@ def render_calculator_mode(backend):
                 "more maintenance manpower is required.",
             )
 
-        cf = st.slider("Technical Competency Factor", min_value=0.1, max_value=1.0,
-                       value=0.6, step=0.01, key="calc1_cf")
+        cf = backend.tcf_for(site) if site else backend.DEFAULT_COMPETENCY_FACTOR
+        st.slider(
+            "Technical Competency Factor",
+            min_value=0.1,
+            max_value=1.0,
+            value=float(cf),
+            step=0.01,
+            disabled=True,
+            help="Nilai ini dibaca dari BACKEND berdasarkan site yang dipilih.",
+        )
         param_help(
             "tcf", "Technical Competency Factor",
             "How productive one mechanic actually is compared with the ideal "
             "standard. **Lower** factor means each person delivers fewer "
             "effective hours, so more people are needed for the same work.\n\n"
-            "In Basecase and Summary this value is not typed in — it is read "
-            "from BACKEND, maintained through the *Plant & Maintenance* form. "
-            "Here it stays adjustable so you can test scenarios.",
+            "This value is read from BACKEND for the selected site, exactly "
+            "like in Basecase and Summary, so the formula stays consistent "
+            "across all calculation modes.",
         )
 
         jarak_km = backend.jarak.get(site) if site else None
@@ -1205,7 +1213,6 @@ def render_calculator_mode(backend):
         )
         return
 
-    # ---------------- Hasil: tiga panel berjajar di bawah parameter ----------
     tot = result["fte"]["Total"]
     cost_lv = result["cost"]["Total"]
 
@@ -1218,8 +1225,6 @@ def render_calculator_mode(backend):
                 charts.role_donut(result["fte"], height=177, show_legend=False),
                 width="stretch", config={"displayModeBar": False},
             )
-            # Legend bawaan Plotly hanya menampilkan nama role. Diganti legend
-            # sendiri supaya FTE dan persentase share-nya ikut terbaca.
             grand = sum(result["fte"][r]["Tot"] for r in ("Mechanic", "Electric", "Welder")) or 1
             st.markdown(
                 theme.donut_legend([
@@ -1232,10 +1237,6 @@ def render_calculator_mode(backend):
             )
 
     with r2:
-        # Qty & cost di readout sengaja TOTAL lintas role (mekanik +
-        # electrician + welder digabung) — rincian per role sudah ada di panel
-        # sebelahnya, jadi readout cukup menjawab "berapa orang dan berapa
-        # biayanya di tiap level".
         with theme.card("calc_out", "Calculator result", "total across all roles",
                         accent=theme.BRAND["orange_deep"]):
             st.markdown(
