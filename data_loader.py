@@ -472,9 +472,33 @@ def parse_backend(raw: pd.DataFrame) -> BackendData:
     # Clasification yang panjangnya berubah-ubah.
     # =========================================================
     competency_factor: Dict[str, float] = {}
-    tcf_title_idx = _find_title_row(df, "technical competency factor")
+    # Dicoba beberapa variasi judul karena form Plant & Maintenance menulis
+    # "Technical Competency Factor (Mechanic)" (lihat HOW_TO_USE di app.py),
+    # bukan "Technical Competency Factor" polos. `_find_title_row` mencocokkan
+    # PERSIS (exact match), jadi kalau hanya dicoba judul polos, baris ini
+    # tidak pernah ketemu di sheet asli -> competency_factor selalu kosong ->
+    # tcf_for() diam-diam jatuh ke DEFAULT_COMPETENCY_FACTOR (0.8) untuk semua
+    # site, walau datanya sudah ada di BACKEND. Ini yang bikin hasil kalkulasi
+    # beda jauh dari sebelumnya (slider manual 0.6 vs default diam-diam 0.8).
+    tcf_title_idx = None
+    for candidate in (
+        "technical competency factor (mechanic)",
+        "technical competency factor",
+        "competency factor (mechanic)",
+        "competency factor",
+    ):
+        tcf_title_idx = _find_title_row(df, candidate)
+        if tcf_title_idx is not None:
+            break
     if tcf_title_idx is None:
-        tcf_title_idx = _find_title_row(df, "competency factor")
+        # Fallback terakhir: cari baris yang Kolom A-nya MENGANDUNG frasa
+        # "competency factor" di mana saja (bukan exact match), untuk
+        # menangani variasi judul lain (spasi ganda, awalan nomor blok, dst.)
+        # yang belum terdaftar di daftar kandidat di atas.
+        for i in range(len(df)):
+            if "competency factor" in _col_text(df, i, 0).strip().lower():
+                tcf_title_idx = i
+                break
     if tcf_title_idx is not None:
         j = tcf_title_idx + 1
         while j < len(df) and _is_blank_row(df, j):

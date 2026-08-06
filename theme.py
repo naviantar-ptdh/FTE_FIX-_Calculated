@@ -1102,18 +1102,50 @@ def inject_css():
             color: {NEUTRAL['text']}; font-weight: 800; margin-right: 5px;
         }}
 
-        /* tombol "!" penjelasan parameter di mode Calculator */
-        div[class*="st-key-help_"] {{ margin-top: -6px; }}
+        /* tombol "!" penjelasan parameter di mode Calculator — dipindah dari
+           bawah field ke ujung kanan atas field, biar sejajar dengan label
+           dan tidak numpuk/nabrak elemen lain di bawahnya. Field pembungkus
+           (field_*) diberi position:relative supaya tombol "!" (help_*) bisa
+           position:absolute relatif ke field itu sendiri, bukan ke halaman —
+           jadi otomatis tidak akan pernah nabrak header oranye di atasnya. */
+        div[class*="st-key-field_"] {{ position: relative; }}
+        div[class*="st-key-field_"] div[class*="st-key-help_"] {{
+            position: absolute; top: -2px; right: 0; margin: 0 !important; z-index: 5;
+        }}
         div[class*="st-key-help_"] button {{
-            min-height: 0 !important; height: 22px !important;
-            padding: 0 9px !important; border-radius: 999px !important;
-            font-weight: 900 !important; font-size: 11px !important;
+            min-height: 0 !important; height: 20px !important; width: 20px !important;
+            padding: 0 !important; border-radius: 50% !important;
+            font-weight: 900 !important; font-size: 10px !important;
+            line-height: 1 !important;
             background: {tint(BRAND['orange'], .88)} !important;
             color: {BRAND['orange_deep']} !important;
             border: 1px solid {tint(BRAND['orange'], .72)} !important;
         }}
         div[class*="st-key-help_"] button:hover {{
             background: {tint(BRAND['orange'], .78)} !important;
+        }}
+
+        /* tombol "!" per kartu di landing page (Engineer / OD & HCM /
+           Plant & Maintenance) — dikunci ke pojok kanan atas KARTUNYA
+           SENDIRI (cardwrap_*), bukan ke halaman, jadi posisinya konsisten
+           di setiap kartu dan tidak pernah bertabrakan dengan header oranye
+           di atas landing page walau di layar sempit. */
+        div[class*="st-key-cardwrap_"] {{ position: relative; }}
+        div[class*="st-key-cardwrap_"] div[class*="st-key-cardhelp_"] {{
+            position: absolute; top: 14px; right: 14px; margin: 0 !important; z-index: 5;
+        }}
+        div[class*="st-key-cardhelp_"] button {{
+            min-height: 0 !important; height: 24px !important; width: 24px !important;
+            padding: 0 !important; border-radius: 50% !important;
+            font-weight: 900 !important; font-size: 11px !important;
+            line-height: 1 !important;
+            background: rgba(255,255,255,.92) !important;
+            color: {BRAND['orange_deep']} !important;
+            border: 1px solid {NEUTRAL['border']} !important;
+            box-shadow: 0 2px 6px -2px rgba(16,24,40,.28);
+        }}
+        div[class*="st-key-cardhelp_"] button:hover {{
+            background: #fff !important; border-color: {BRAND['orange']} !important;
         }}
 
         /* tanda seru kecil di sebelah label parameter */

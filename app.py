@@ -1079,76 +1079,79 @@ def render_calculator_mode(backend):
 
     # ---------------- Parameter: satu kartu MELEBAR penuh ----------------
     # Empat input utama berjajar dalam satu baris, technical competency factor
-    # ditampilkan dari BACKEND pada baris sendiri, lalu catatan jarak + tombol.
-    # Hasil perhitungan menyusul DI BAWAH kartu ini, bukan di sampingnya.
+    # di baris sendiri (butuh lebar untuk track slider), lalu catatan jarak +
+    # tombol. Hasil perhitungan menyusul DI BAWAH kartu ini, bukan di sampingnya.
     #
     # Tiap parameter diberi tombol "!" berisi penjelasan singkat: istilah di
     # sini (PA, competency factor, sub category) tidak berarti sama bagi semua
     # orang yang memakai kalkulator, dan menaruh penjelasannya sebagai teks
     # tetap akan membuat kartu parameter jadi padat.
-    def param_help(key: str, title: str, body: str):
-        with st.container(key=f"help_{key}"):
-            with st.popover("!", width="content"):
-                st.markdown(f"**{title}**")
-                st.markdown(body)
+    def param_field(key: str, render_widget, title: str, body: str):
+        """Render one parameter widget with its "!" info button pinned to
+        the top-right corner of the field itself (not stacked underneath
+        it) — see the field_/help_ CSS rules in theme.py."""
+        with st.container(key=f"field_{key}"):
+            value = render_widget()
+            with st.container(key=f"help_{key}"):
+                with st.popover("！", width="content"):
+                    st.markdown(f"**{title}**")
+                    st.markdown(body)
+        return value
 
     with theme.card("calc_param", "Parameters", "all fields required"):
         p1, p2, p3, p4 = st.columns(4, gap="medium")
         with p1:
-            site = st.selectbox("Site", options=sites, index=None,
-                                placeholder="Select site…", key="calc1_site")
-            param_help(
-                "site", "Site",
+            site = param_field(
+                "site",
+                lambda: st.selectbox("Site", options=sites, index=None,
+                                     placeholder="Select site…", key="calc1_site"),
+                "Site",
                 "The mine site the calculation belongs to. It decides three "
                 "values that are read from BACKEND and not typed here: "
                 "**ratio shift**, **lost time**, and **work area distance**.",
             )
         with p2:
-            sub_category = st.selectbox("Equipment type", options=sub_cats, index=None,
-                                        placeholder="Select sub category…", key="calc1_subcat")
-            param_help(
-                "subcat", "Equipment type (sub category)",
+            sub_category = param_field(
+                "subcat",
+                lambda: st.selectbox("Equipment type", options=sub_cats, index=None,
+                                     placeholder="Select sub category…", key="calc1_subcat"),
+                "Equipment type (sub category)",
                 "The equipment class, e.g. *Big Exca* or *Medium Hauler*. Each "
                 "class carries its own **load factor** for mechanic, "
                 "electrician and welder — that factor is what turns a unit "
                 "count into working hours.",
             )
         with p3:
-            jumlah_unit = st.number_input("Unit count", min_value=0.0, value=1.0,
-                                          step=1.0, key="calc1_jml")
-            param_help(
-                "qty", "Unit count",
+            jumlah_unit = param_field(
+                "qty",
+                lambda: st.number_input("Unit count", min_value=0.0, value=1.0,
+                                        step=1.0, key="calc1_jml"),
+                "Unit count",
                 "How many units of the selected equipment type the site "
                 "operates. Manpower scales directly with this number.",
             )
         with p4:
-            pa = st.number_input("PA target (%)", min_value=1.0, max_value=100.0,
-                                 value=85.0, step=1.0, key="calc1_pa")
-            param_help(
-                "pa", "PA target (Physical Availability)",
+            pa = param_field(
+                "pa",
+                lambda: st.number_input("PA target (%)", min_value=1.0, max_value=100.0,
+                                        value=85.0, step=1.0, key="calc1_pa"),
+                "PA target (Physical Availability)",
                 "The share of time a unit must be available to operate. A "
                 "**higher** PA target means less tolerance for downtime, so "
                 "more maintenance manpower is required.",
             )
 
-        cf = backend.tcf_for(site) if site else backend.DEFAULT_COMPETENCY_FACTOR
-        st.slider(
+        cf = param_field(
+            "tcf",
+            lambda: st.slider("Technical Competency Factor", min_value=0.1, max_value=1.0,
+                              value=0.6, step=0.01, key="calc1_cf"),
             "Technical Competency Factor",
-            min_value=0.1,
-            max_value=1.0,
-            value=float(cf),
-            step=0.01,
-            disabled=True,
-            help="Nilai ini dibaca dari BACKEND berdasarkan site yang dipilih.",
-        )
-        param_help(
-            "tcf", "Technical Competency Factor",
             "How productive one mechanic actually is compared with the ideal "
             "standard. **Lower** factor means each person delivers fewer "
             "effective hours, so more people are needed for the same work.\n\n"
-            "This value is read from BACKEND for the selected site, exactly "
-            "like in Basecase and Summary, so the formula stays consistent "
-            "across all calculation modes.",
+            "In Basecase and Summary this value is not typed in — it is read "
+            "from BACKEND, maintained through the *Plant & Maintenance* form. "
+            "Here it stays adjustable so you can test scenarios.",
         )
 
         jarak_km = backend.jarak.get(site) if site else None
@@ -1213,6 +1216,7 @@ def render_calculator_mode(backend):
         )
         return
 
+    # ---------------- Hasil: tiga panel berjajar di bawah parameter ----------
     tot = result["fte"]["Total"]
     cost_lv = result["cost"]["Total"]
 
@@ -1225,6 +1229,8 @@ def render_calculator_mode(backend):
                 charts.role_donut(result["fte"], height=177, show_legend=False),
                 width="stretch", config={"displayModeBar": False},
             )
+            # Legend bawaan Plotly hanya menampilkan nama role. Diganti legend
+            # sendiri supaya FTE dan persentase share-nya ikut terbaca.
             grand = sum(result["fte"][r]["Tot"] for r in ("Mechanic", "Electric", "Welder")) or 1
             st.markdown(
                 theme.donut_legend([
@@ -1237,6 +1243,10 @@ def render_calculator_mode(backend):
             )
 
     with r2:
+        # Qty & cost di readout sengaja TOTAL lintas role (mekanik +
+        # electrician + welder digabung) — rincian per role sudah ada di panel
+        # sebelahnya, jadi readout cukup menjawab "berapa orang dan berapa
+        # biayanya di tiap level".
         with theme.card("calc_out", "Calculator result", "total across all roles",
                         accent=theme.BRAND["orange_deep"]):
             st.markdown(
@@ -1484,6 +1494,10 @@ DIRECTORATES = {
         "desc": "Submit the unit population that the MPP calculation is "
                 "built from.",
         "fills": "Fills in the <b>Unit Form</b> — category, unit type and PA.",
+        "info": "Registers every equipment unit a site operates — its "
+                "**category**, **unit type**, and **PA target**. This is "
+                "the population the FTE Calculator scales its manpower "
+                "estimate from, so it needs to be filled in first.",
         "url": "https://script.google.com/macros/s/AKfycbyCDxxEYFCMfgghj4KD_X1iqo49lkKlQfzpXj8FK-nGp30R1YLgIJnAeMlsEMXPtCSQ9w/exec",
     },
     "hcm": {
@@ -1495,6 +1509,10 @@ DIRECTORATES = {
                 "actually works.",
         "fills": "Fills in the <b>Observation Form</b> — effective "
                  "mechanic working hour.",
+        "info": "Captures field observations of how many hours a mechanic "
+                "is actually productive during a shift, plus each site's "
+                "**shift ratio**. These feed the calculator's RACI and "
+                "ratio-shift assumptions.",
         "url": "https://script.google.com/macros/s/AKfycbxTMCA17k_yqY-WjZWXera6D_LYfk3M5lwwxRU08O-WLZeT5iASFe6_Vsbg6vIvDMPB2w/exec",
     },
     "plant": {
@@ -1505,6 +1523,10 @@ DIRECTORATES = {
         "desc": "Set the Technical Competency Factor each site is calculated "
                 "with.",
         "fills": "Fills in the <b>Technical Competency Factor</b> — per site.",
+        "info": "Sets each site's **Technical Competency Factor (Mechanic)** "
+                "— how productive one mechanic is compared with the ideal "
+                "standard. Basecase and Summary read this value straight "
+                "from BACKEND instead of asking for it manually.",
         "url": "https://script.google.com/macros/s/AKfycbwTQQ4JPpecGH3DGpOAJ1a54DRjqn28LmH2mXGo2b8G8kSrXDIXxE4YR_u7EaLnWWTp/exec",
     },
 }
@@ -1590,11 +1612,20 @@ def render_landing():
     for col, key in zip(cols, ("engineer", "hcm", "plant")):
         d = DIRECTORATES[key]
         with col:
-            st.markdown(
-                theme.choice_card(theme.image_uri(d["icon"]), d["title"],
-                                  d["desc"], d["fills"], d["accent"], d["wash"]),
-                unsafe_allow_html=True,
-            )
+            with st.container(key=f"cardwrap_{key}"):
+                st.markdown(
+                    theme.choice_card(theme.image_uri(d["icon"]), d["title"],
+                                      d["desc"], d["fills"], d["accent"], d["wash"]),
+                    unsafe_allow_html=True,
+                )
+                # Tanda seru di pojok kanan atas kartu, dikunci ke kartu itu
+                # sendiri (lihat CSS st-key-cardwrap_/st-key-cardhelp_ di
+                # theme.py) — jadi selalu ada di ujung yang sama untuk
+                # setiap kartu dan tidak pernah nabrak header oranye.
+                with st.container(key=f"cardhelp_{key}"):
+                    with st.popover("！", width="content"):
+                        st.markdown(f"**{d['title']}**")
+                        st.markdown(d.get("info", d["fills"]))
             with st.container(key=f"go_{key}"):
                 if st.button("Open form", width="stretch", key=f"btn_go_{key}"):
                     st.session_state.page = key
