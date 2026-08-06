@@ -75,6 +75,9 @@ def backend() -> BackendData:
         jarak={s: p[2] for s, p in _SITE_PARAMS.items()},
         classification={_norm(k): v[0] for k, v in _CATALOG.items()},
         classification_order=list(_CATEGORY_ORDER),
+        # Sengaja dibuat berbeda antar site supaya mode Summary benar-benar
+        # menguji jalur "tiap site memakai faktornya sendiri".
+        competency_factor={"KCP": 0.80, "ACP": 0.75, "BCP": 0.85},
     )
 
 

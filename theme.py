@@ -997,6 +997,133 @@ def inject_css():
             border-top: 1px dashed {NEUTRAL['border']}; padding-top: 10px;
         }}
         .dh-choice .fills b {{ color: var(--dh-accent, {BRAND['orange']}); font-weight: 800; }}
+        .dh-choice .body {{ display: flex; flex-direction: column; flex: 1 1 auto; }}
+
+        /* Kartu kalkulator: selebar layar, ikon di kiri, isi mengalir ke kanan. */
+        .dh-choice-wide {{
+            flex-direction: row; align-items: flex-start; gap: 18px;
+            min-height: 0; padding: 20px 22px;
+        }}
+        .dh-choice-wide .ico {{ margin-bottom: 0; flex: 0 0 auto; }}
+        .dh-choice-wide .desc {{ margin-bottom: 10px; }}
+
+        /* pemisah berlabel antara baris form dan kartu kalkulator */
+        .dh-ldivider {{
+            display: flex; align-items: center; gap: 14px;
+            margin: 22px 0 14px 0;
+        }}
+        .dh-ldivider::before, .dh-ldivider::after {{
+            content: ""; flex: 1 1 auto; height: 1px; background: {NEUTRAL['border']};
+        }}
+        .dh-ldivider span {{
+            font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+            text-transform: uppercase; color: {NEUTRAL['text_soft']};
+        }}
+
+        /* tombol landing: dibuat konsisten, tidak memakai merah bawaan Streamlit */
+        div[class*="st-key-go_"] button {{
+            border-radius: 11px !important; font-weight: 700 !important;
+            height: 44px; border: 1px solid {NEUTRAL['border']} !important;
+            background: {NEUTRAL['card']} !important; color: {NEUTRAL['text']} !important;
+        }}
+        div[class*="st-key-go_"] button:hover {{
+            border-color: {BRAND['orange']} !important; color: {BRAND['orange']} !important;
+        }}
+        div[class*="st-key-go_calc"] button {{
+            background: linear-gradient(135deg, {BRAND['orange_deep']}, {BRAND['orange']}) !important;
+            color: #fff !important; border: none !important;
+            box-shadow: 0 6px 16px -7px rgba(217,78,0,.65);
+        }}
+        div[class*="st-key-go_calc"] button:hover {{ color: #fff !important; }}
+        div[class*="st-key-how_to"] button {{
+            border-radius: 11px !important; height: 44px; font-weight: 700 !important;
+            border: 1px solid {NEUTRAL['border']} !important;
+            background: {NEUTRAL['card']} !important; color: {NEUTRAL['text_muted']} !important;
+        }}
+
+        /* panel How to use */
+        .dh-howto {{ max-width: 720px; }}
+        .dh-howto .blk {{ margin-bottom: 18px; }}
+        .dh-howto .blk:last-child {{ margin-bottom: 0; }}
+        .dh-howto .t {{
+            font-family: {FONT_DISPLAY}; font-size: 14px; font-weight: 800;
+            color: {NEUTRAL['text']};
+        }}
+        .dh-howto .s {{
+            font-size: 11.5px; font-weight: 700; color: {BRAND['orange']};
+            text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px;
+        }}
+        .dh-howto ol {{ margin: 0; padding-left: 18px; }}
+        .dh-howto li {{
+            font-size: 12.5px; color: {NEUTRAL['text_muted']}; line-height: 1.6;
+            margin-bottom: 6px;
+        }}
+        .dh-howto li b {{ color: {NEUTRAL['text']}; font-weight: 700; }}
+
+        /* nilai read-only di sidebar (datang dari BACKEND, bukan input user) */
+        .dh-sreadout {{
+            background: {NEUTRAL['wash']}; border: 1px solid {NEUTRAL['border']};
+            border-radius: 10px; padding: 10px 12px; margin-bottom: 10px;
+        }}
+        .dh-sreadout .lbl {{
+            font-size: 9.5px; font-weight: 800; letter-spacing: .08em;
+            text-transform: uppercase; color: {NEUTRAL['text_soft']};
+        }}
+        .dh-sreadout .val {{
+            font-family: {FONT_DISPLAY}; font-size: 22px; font-weight: 800;
+            color: {NEUTRAL['text']}; line-height: 1.2; font-variant-numeric: tabular-nums;
+        }}
+        .dh-sreadout .note {{ font-size: 10.5px; color: {NEUTRAL['text_muted']}; }}
+        .dh-sreadout .rows {{ margin-top: 4px; }}
+        .dh-sreadout .row {{
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 12px; color: {NEUTRAL['text_muted']}; padding: 3px 0;
+        }}
+        .dh-sreadout .row b {{
+            color: {NEUTRAL['text']}; font-weight: 800; font-variant-numeric: tabular-nums;
+        }}
+
+        /* keterangan asumsi tarif di bawah tabel cost */
+        .dh-assume {{
+            margin-top: 8px; padding-top: 8px;
+            border-top: 1px dashed {NEUTRAL['border']};
+        }}
+        .dh-assume .lbl {{
+            font-size: 9.5px; font-weight: 800; letter-spacing: .08em;
+            text-transform: uppercase; color: {NEUTRAL['text_soft']}; margin-bottom: 5px;
+        }}
+        .dh-assume .chips {{ display: flex; flex-wrap: wrap; gap: 6px; }}
+        .dh-assume .chip {{
+            background: {NEUTRAL['wash']}; border: 1px solid {NEUTRAL['border']};
+            border-radius: 7px; padding: 3px 8px; font-size: 11px;
+            color: {NEUTRAL['text_muted']}; font-variant-numeric: tabular-nums;
+        }}
+        .dh-assume .chip b {{
+            color: {NEUTRAL['text']}; font-weight: 800; margin-right: 5px;
+        }}
+
+        /* tombol "!" penjelasan parameter di mode Calculator */
+        div[class*="st-key-help_"] {{ margin-top: -6px; }}
+        div[class*="st-key-help_"] button {{
+            min-height: 0 !important; height: 22px !important;
+            padding: 0 9px !important; border-radius: 999px !important;
+            font-weight: 900 !important; font-size: 11px !important;
+            background: {tint(BRAND['orange'], .88)} !important;
+            color: {BRAND['orange_deep']} !important;
+            border: 1px solid {tint(BRAND['orange'], .72)} !important;
+        }}
+        div[class*="st-key-help_"] button:hover {{
+            background: {tint(BRAND['orange'], .78)} !important;
+        }}
+
+        /* tanda seru kecil di sebelah label parameter */
+        .dh-info {{
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 15px; height: 15px; border-radius: 50%;
+            background: {tint(BRAND['orange'], .86)}; color: {BRAND['orange_deep']};
+            font-size: 10px; font-weight: 900; margin-left: 6px; cursor: help;
+            vertical-align: middle;
+        }}
 
         /* halaman embed: iframe dibuat rata dengan kanvas, tanpa kesan "kotak" */
         div[class*="st-key-embed_frame"] iframe {{
@@ -1204,13 +1331,80 @@ def hero(logo_uri: str, eyebrow: str, title: str) -> str:
 
 
 def choice_card(icon_uri: str, title: str, desc: str, fills: str,
-                accent: str, wash: str) -> str:
+                accent: str, wash: str, wide: bool = False) -> str:
+    """Kartu pilihan di landing page.
+
+    `wide=True` dipakai untuk kartu kalkulator yang berdiri sendiri selebar
+    layar di baris bawah: ikon pindah ke kiri teks, bukan di atasnya, supaya
+    kartunya tidak jadi tinggi dan kosong di tengah.
+    """
     ico = f'<img src="{icon_uri}" alt=""/>' if icon_uri else ""
+    cls = "dh-choice dh-choice-wide" if wide else "dh-choice"
     return (
-        f'<div class="dh-choice" style="--dh-accent:{accent};--dh-wash:{wash}">'
+        f'<div class="{cls}" style="--dh-accent:{accent};--dh-wash:{wash}">'
         f'<div class="ico">{ico}</div>'
-        f'<h3>{title}</h3><p class="desc">{desc}</p>'
-        f'<div class="fills">{fills}</div></div>'
+        f'<div class="body"><h3>{title}</h3><p class="desc">{desc}</p>'
+        f'<div class="fills">{fills}</div></div></div>'
+    )
+
+
+def landing_divider(label: str) -> str:
+    """Garis pemisah berlabel antara baris form dan kartu kalkulator."""
+    return f'<div class="dh-ldivider"><span>{label}</span></div>'
+
+
+def how_to_use(sections: list[dict]) -> str:
+    """Isi panel 'How to use' pada landing page."""
+    out = ['<div class="dh-howto">']
+    for sec in sections:
+        steps = "".join(f"<li>{s}</li>" for s in sec["steps"])
+        out.append(
+            f'<div class="blk"><div class="t">{sec["title"]}</div>'
+            f'<div class="s">{sec["subtitle"]}</div>'
+            f'<ol>{steps}</ol></div>'
+        )
+    out.append("</div>")
+    return "".join(out)
+
+
+def side_readout(label: str, value: str, note: str = "") -> str:
+    """Nilai read-only di sidebar — untuk parameter yang datang dari BACKEND,
+    bukan dari input pengguna."""
+    n = f'<div class="note">{note}</div>' if note else ""
+    return (
+        f'<div class="dh-sreadout"><div class="lbl">{label}</div>'
+        f'<div class="val">{value}</div>{n}</div>'
+    )
+
+
+def side_readout_list(label: str, items: list[tuple[str, str]]) -> str:
+    rows = "".join(
+        f'<div class="row"><span>{k}</span><b>{v}</b></div>' for k, v in items
+    )
+    return (
+        f'<div class="dh-sreadout"><div class="lbl">{label}</div>'
+        f'<div class="rows">{rows}</div></div>'
+    )
+
+
+def info_dot(text: str) -> str:
+    """Tanda seru kecil dengan tooltip — dipakai di sebelah label parameter."""
+    return f'<span class="dh-info" title="{text}">!</span>'
+
+
+def assumption_note(label: str, items: list[tuple[str, str]]) -> str:
+    """Keterangan asumsi tarif di bawah tabel cost.
+
+    Tarif cost bukan berasal dari BACKEND melainkan konstanta di config.py,
+    jadi angkanya ditulis terbuka di dashboard supaya isi tabel bisa
+    ditelusuri tanpa harus membuka kode.
+    """
+    chips = "".join(
+        f'<span class="chip"><b>{k}</b>{v}</span>' for k, v in items
+    )
+    return (
+        f'<div class="dh-assume"><div class="lbl">{label}</div>'
+        f'<div class="chips">{chips}</div></div>'
     )
 
 
