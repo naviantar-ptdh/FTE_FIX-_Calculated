@@ -967,26 +967,50 @@ def inject_css():
         /* ---- Tombol Open Calculator di pojok kanan band hero --------------
            Ditempel absolut ke atas band (bukan di dalamnya) karena tombol
            Streamlit tidak bisa ikut dirender di dalam string HTML hero.
-           Gayanya: kotak putih tanpa isi dengan teks putih tebal. */
+
+           Dibuat timbul 3D supaya terbaca sebagai tombol fitur, bukan sekadar
+           label: permukaannya diberi isi tipis + kilau di tepi atas, lalu
+           "bibir" keras di bawahnya (box-shadow tanpa blur) yang memendek
+           saat ditekan — itu yang memberi kesan tombol benar-benar turun. */
         div[class*="st-key-hero_calc"] {{
             position: absolute; top: 50%; right: 26px;
             transform: translateY(-50%); width: 200px; z-index: 8;
         }}
         div[class*="st-key-hero_calc"] button {{
-            background: transparent !important;
-            border: 1.5px solid rgba(255,255,255,.85) !important;
+            background: linear-gradient(180deg,
+                        rgba(255,255,255,.30) 0%, rgba(255,255,255,.14) 100%) !important;
+            border: 1.5px solid rgba(255,255,255,.92) !important;
+            border-bottom-color: rgba(255,255,255,.75) !important;
             color: #fff !important;
-            border-radius: 11px !important; height: 46px;
-            box-shadow: none !important;
-            transition: background-color .18s ease, transform .18s ease;
+            border-radius: 12px !important; height: 46px;
+            box-shadow:
+                0 4px 0 rgba(150,52,0,.55),
+                0 9px 16px -6px rgba(120,42,0,.45),
+                inset 0 1px 0 rgba(255,255,255,.55) !important;
+            transform: translateY(0);
+            transition: transform .12s ease, box-shadow .12s ease,
+                        background-color .18s ease;
         }}
         div[class*="st-key-hero_calc"] button p {{
             font-weight: 800 !important; letter-spacing: .01em;
+            text-shadow: 0 1px 1px rgba(140,48,0,.35);
         }}
         div[class*="st-key-hero_calc"] button:hover {{
-            background: rgba(255,255,255,.16) !important;
+            background: linear-gradient(180deg,
+                        rgba(255,255,255,.42) 0%, rgba(255,255,255,.22) 100%) !important;
             border-color: #fff !important; color: #fff !important;
-            transform: translateY(-1px);
+            transform: translateY(-2px);
+            box-shadow:
+                0 6px 0 rgba(150,52,0,.55),
+                0 13px 20px -6px rgba(120,42,0,.5),
+                inset 0 1px 0 rgba(255,255,255,.65) !important;
+        }}
+        div[class*="st-key-hero_calc"] button:active {{
+            transform: translateY(3px);
+            box-shadow:
+                0 1px 0 rgba(150,52,0,.55),
+                0 3px 7px -3px rgba(120,42,0,.4),
+                inset 0 1px 0 rgba(255,255,255,.4) !important;
         }}
         @media (max-width: 900px) {{
             .dh-hero-action {{ padding-right: 26px; }}
