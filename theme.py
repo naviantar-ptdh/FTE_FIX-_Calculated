@@ -960,6 +960,48 @@ def inject_css():
             font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase;
             color: rgba(255,255,255,.86); font-weight: 800; margin-bottom: 3px;
         }}
+        /* sisakan ruang di kanan band untuk tombol Open Calculator */
+        .dh-hero-action {{ padding-right: 250px; }}
+        div[class*="st-key-hero_wrap"] {{ position: relative; }}
+
+        /* ---- Tombol Open Calculator di pojok kanan band hero --------------
+           Ditempel absolut ke atas band (bukan di dalamnya) karena tombol
+           Streamlit tidak bisa ikut dirender di dalam string HTML hero.
+           Gayanya: kotak putih tanpa isi, teks putih, dengan garis diagonal
+           tipis di dalamnya — tekstur yang sama dipakai pada display hasil
+           kalkulator, supaya keduanya terbaca sebagai satu keluarga. */
+        div[class*="st-key-hero_calc"] {{
+            position: absolute; top: 50%; right: 26px;
+            transform: translateY(-50%); width: 200px; z-index: 8;
+        }}
+        div[class*="st-key-hero_calc"] button {{
+            position: relative; overflow: hidden;
+            background: transparent !important;
+            border: 1.5px solid rgba(255,255,255,.85) !important;
+            color: #fff !important; font-weight: 800 !important;
+            border-radius: 11px !important; height: 46px;
+            box-shadow: none !important;
+            transition: background-color .18s ease, transform .18s ease;
+        }}
+        div[class*="st-key-hero_calc"] button::before {{
+            content: ""; position: absolute; inset: 0; pointer-events: none;
+            background: repeating-linear-gradient(
+                135deg, rgba(255,255,255,0) 0 7px, rgba(255,255,255,.34) 7px 8px);
+        }}
+        div[class*="st-key-hero_calc"] button:hover {{
+            background: rgba(255,255,255,.16) !important;
+            border-color: #fff !important; color: #fff !important;
+            transform: translateY(-1px);
+        }}
+        div[class*="st-key-hero_calc"] button p {{
+            position: relative; z-index: 1;
+        }}
+        @media (max-width: 900px) {{
+            .dh-hero-action {{ padding-right: 26px; }}
+            div[class*="st-key-hero_calc"] {{
+                position: static; transform: none; width: 100%; margin-top: 10px;
+            }}
+        }}
 
         /* Kartu pilihan: ikon, judul, satu kalimat, satu baris "isinya apa".
            Daftar panduan empat butir yang lama membuat halaman penuh teks. */
@@ -1352,11 +1394,18 @@ def section_heading(no: int, title: str, sub: str = "", tag: str = "") -> str:
     )
 
 
-def hero(logo_uri: str, eyebrow: str, title: str) -> str:
+def hero(logo_uri: str, eyebrow: str, title: str, action: bool = False) -> str:
+    """Band oranye landing page.
+
+    `action=True` menyisakan ruang kosong di sisi kanan band supaya tombol
+    "Open Calculator" bisa ditempel ke sana secara absolut (tombol Streamlit
+    tidak bisa ditaruh di dalam string HTML ini).
+    """
     logo_html = (f'<img class="logo" src="{logo_uri}" alt=""/>'
                  f'<div class="rule"></div>') if logo_uri else ""
+    cls = "dh-hero dh-hero-action" if action else "dh-hero"
     return (
-        f'<div class="dh-hero"><div class="row">{logo_html}'
+        f'<div class="{cls}"><div class="row">{logo_html}'
         f'<div><div class="eyebrow">{eyebrow}</div><h1>{title}</h1></div>'
         f"</div></div>"
     )
