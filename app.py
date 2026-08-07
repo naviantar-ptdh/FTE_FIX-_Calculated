@@ -1739,13 +1739,6 @@ def main():
                     st.session_state.app_mode = key
                     st.rerun()
 
-        st.markdown('<div class="dh-side-label">Single unit</div>',
-                    unsafe_allow_html=True)
-        with st.container(key="nav_opencalc"):
-            if st.button("Open Calculator", width="stretch", key="btn_open_calc"):
-                st.session_state.page = "calculator"
-                st.rerun()
-
     if st.session_state.app_mode == "summary":
         render_summary_mode(backend)
     else:
