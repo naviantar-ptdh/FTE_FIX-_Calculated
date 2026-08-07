@@ -1522,7 +1522,7 @@ DIRECTORATES = {
 # keempat yang sejajar dengan ketiga form input.
 CALCULATOR_CARD = {
     "icon": "optimizing (1).png",
-    "title": "FTE Calculator",
+    "title": "Manpower Calculation",
     "accent": theme.BRAND["navy"],
     "wash": "#EAEFF6",
     "desc": "Turn unit population and site parameters into manpower and cost.",
