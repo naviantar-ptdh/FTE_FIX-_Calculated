@@ -1486,7 +1486,7 @@ def render_summary_mode(backend):
 DIRECTORATES = {
     "engineer": {
         "icon": "mechanical-engineer.png",
-        "title": "Engineer",
+        "title": "Engineering",
         "accent": theme.BRAND["navy"],
         "wash": "#EAEFF6",
         "desc": "Submit the unit population that the MPP calculation is "
@@ -1548,7 +1548,7 @@ HOW_TO_USE = {
         ],
     },
     "engineer": {
-        "title": "Engineer Form",
+        "title": "Engineering Form",
         "subtitle": "Load Factor Data Editor",
         "steps": [
             "Click one of the three site cards below (KCP, ACP, or BCP) to open that "
@@ -1577,12 +1577,22 @@ HOW_TO_USE = {
 
 
 def render_landing():
-    st.markdown(
-        theme.hero(theme.image_uri("logo_putih (2).png"),
-                   "PT Darma Henwa · Workforce Planning",
-                   "Manpower Planning Workspace"),
-        unsafe_allow_html=True,
-    )
+    # Band hero + tombol Open Calculator dibungkus satu container: container
+    # inilah jangkar `position: relative`-nya, sehingga tombol bisa ditempel
+    # di pojok kanan band. Kalkulator satu-unit dipisah ke sini karena alurnya
+    # berdiri sendiri — Summary dan Basecase satu alur dengan ketiga form di
+    # bawah, kalkulator tidak.
+    with st.container(key="hero_wrap"):
+        st.markdown(
+            theme.hero(theme.image_uri("logo_putih (2).png"),
+                       "PT Darma Henwa · Workforce Planning",
+                       "Manpower Planning Workspace", action=True),
+            unsafe_allow_html=True,
+        )
+        with st.container(key="hero_calc"):
+            if st.button("Open Calculator", width="stretch", key="btn_hero_calc"):
+                st.session_state.page = "calculator"
+                st.rerun()
     st.write("")
 
     cols = st.columns(3, gap="medium")
@@ -1618,7 +1628,7 @@ def render_landing():
         unsafe_allow_html=True,
     )
     with st.container(key="go_calc"):
-        if st.button("Open calculator", width="stretch", key="btn_go_calc",
+        if st.button("Run Calculation", width="stretch", key="btn_go_calc",
                      type="primary"):
             st.session_state.page = "calc"
             st.rerun()
@@ -1652,6 +1662,20 @@ def render_embed_page(key: str):
 
 
 # ===========================================================================
+def _sidebar_brand():
+    """Blok merek di puncak sidebar — dipakai halaman kalkulator maupun
+    halaman Summary/Basecase, jadi ditarik keluar supaya tidak dua salinan."""
+    logo = theme.image_uri("logo_putih (2).png")
+    mark = (f'<div class="mark"><img src="{logo}" alt=""/></div>'
+            if logo else '<div class="mark"></div>')
+    st.markdown(
+        f'<div class="dh-side-brand">{mark}'
+        f'<div><div class="title">FTE Calculator</div>'
+        f'<div class="subtitle">PT Darma Henwa</div></div></div>',
+        unsafe_allow_html=True,
+    )
+
+
 def main():
     st.session_state.setdefault("page", "landing")
     page = st.session_state.page
@@ -1671,19 +1695,34 @@ def main():
         st.error(f"BACKEND data failed to load: {exc}")
         return
 
+    # Kalkulator satu-unit berdiri sendiri: alurnya tidak berbagi apa pun
+    # dengan Summary/Basecase (tidak memilih site, tidak memakai Sheet9), jadi
+    # ia punya halamannya sendiri dan tidak ikut di nav mode.
+    if page == "calculator":
+        with st.sidebar:
+            _sidebar_brand()
+            with st.container(key="side_home_calc"):
+                if st.button("← Home", width="stretch", key="btn_home_calc"):
+                    st.session_state.page = "landing"
+                    st.rerun()
+            with st.container(key="nav_runcalc"):
+                if st.button("Run Calculation", width="stretch", key="btn_to_calc"):
+                    st.session_state.page = "calc"
+                    st.rerun()
+        render_calculator_mode(backend)
+        if DEMO:
+            st.caption("Demo mode: bundled sample data, not Google Sheets. "
+                       "Run without FTE_DEMO=1 for live data.")
+        return
+
     # Summary dibuka lebih dulu: begitu kalkulator dibuka, angka gabungan
     # seluruh site langsung terlihat tanpa perlu memilih apa pun.
     st.session_state.setdefault("app_mode", "summary")
+    if st.session_state.app_mode == "calculator":      # sisa state versi lama
+        st.session_state.app_mode = "summary"
 
     with st.sidebar:
-        logo = theme.image_uri("logo_putih (2).png")
-        mark = f'<div class="mark"><img src="{logo}" alt=""/></div>' if logo else '<div class="mark"></div>'
-        st.markdown(
-            f'<div class="dh-side-brand">{mark}'
-            f'<div><div class="title">FTE Calculator</div>'
-            f'<div class="subtitle">PT Darma Henwa</div></div></div>',
-            unsafe_allow_html=True,
-        )
+        _sidebar_brand()
         with st.container(key="side_home"):
             if st.button("← Home", width="stretch", key="btn_home"):
                 st.session_state.page = "landing"
@@ -1693,7 +1732,6 @@ def main():
         for key, label, container in (
             ("summary", "Summary", "nav_summary"),
             ("multisite", "Basecase All Unit", "nav_basecase"),
-            ("calculator", "Calculator", "nav_calc"),
         ):
             with st.container(key=container):
                 if st.button(label, width="stretch", key=f"btn_mode_{key}",
@@ -1701,9 +1739,14 @@ def main():
                     st.session_state.app_mode = key
                     st.rerun()
 
-    if st.session_state.app_mode == "calculator":
-        render_calculator_mode(backend)
-    elif st.session_state.app_mode == "summary":
+        st.markdown('<div class="dh-side-label">Single unit</div>',
+                    unsafe_allow_html=True)
+        with st.container(key="nav_opencalc"):
+            if st.button("Open Calculator", width="stretch", key="btn_open_calc"):
+                st.session_state.page = "calculator"
+                st.rerun()
+
+    if st.session_state.app_mode == "summary":
         render_summary_mode(backend)
     else:
         render_basecase_mode(backend)
