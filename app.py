@@ -1705,10 +1705,6 @@ def main():
                 if st.button("← Home", width="stretch", key="btn_home_calc"):
                     st.session_state.page = "landing"
                     st.rerun()
-            with st.container(key="nav_runcalc"):
-                if st.button("Run Calculation", width="stretch", key="btn_to_calc"):
-                    st.session_state.page = "calc"
-                    st.rerun()
         render_calculator_mode(backend)
         if DEMO:
             st.caption("Demo mode: bundled sample data, not Google Sheets. "
