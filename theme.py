@@ -967,34 +967,26 @@ def inject_css():
         /* ---- Tombol Open Calculator di pojok kanan band hero --------------
            Ditempel absolut ke atas band (bukan di dalamnya) karena tombol
            Streamlit tidak bisa ikut dirender di dalam string HTML hero.
-           Gayanya: kotak putih tanpa isi, teks putih, dengan garis diagonal
-           tipis di dalamnya — tekstur yang sama dipakai pada display hasil
-           kalkulator, supaya keduanya terbaca sebagai satu keluarga. */
+           Gayanya: kotak putih tanpa isi dengan teks putih tebal. */
         div[class*="st-key-hero_calc"] {{
             position: absolute; top: 50%; right: 26px;
             transform: translateY(-50%); width: 200px; z-index: 8;
         }}
         div[class*="st-key-hero_calc"] button {{
-            position: relative; overflow: hidden;
             background: transparent !important;
             border: 1.5px solid rgba(255,255,255,.85) !important;
-            color: #fff !important; font-weight: 800 !important;
+            color: #fff !important;
             border-radius: 11px !important; height: 46px;
             box-shadow: none !important;
             transition: background-color .18s ease, transform .18s ease;
         }}
-        div[class*="st-key-hero_calc"] button::before {{
-            content: ""; position: absolute; inset: 0; pointer-events: none;
-            background: repeating-linear-gradient(
-                135deg, rgba(255,255,255,0) 0 7px, rgba(255,255,255,.34) 7px 8px);
+        div[class*="st-key-hero_calc"] button p {{
+            font-weight: 800 !important; letter-spacing: .01em;
         }}
         div[class*="st-key-hero_calc"] button:hover {{
             background: rgba(255,255,255,.16) !important;
             border-color: #fff !important; color: #fff !important;
             transform: translateY(-1px);
-        }}
-        div[class*="st-key-hero_calc"] button p {{
-            position: relative; z-index: 1;
         }}
         @media (max-width: 900px) {{
             .dh-hero-action {{ padding-right: 26px; }}
