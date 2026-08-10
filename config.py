@@ -54,12 +54,12 @@ COST_RATE = {
 
 # Cost rate per staff FTE (Rp) - asumsi manual dari user, bukan dari BACKEND
 STAFF_COST_RATE = {
-    "Foreman": 11_500_000,
-    "Supervisor": 13_000_000,
-    "Planner": 11_500_000,      # sama dengan Foreman, sesuai arahan user
+    "Foreman": 9_000_000,
+    "Supervisor": 12_000_000,
+    "Planner": 9_000_000,      # sama dengan Foreman, sesuai arahan user
     # PLACEHOLDER - user belum memberi tarif Superintendent. Ganti angka ini
     # begitu tarif resminya ada; seluruh tabel Cost membacanya dari sini.
-    "Superintendent": 15_000_000,
+    "Superintendent": 17_000_000,
 }
 
 ROLES = ["Mechanic", "Electric", "Welder"]
