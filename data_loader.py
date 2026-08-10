@@ -172,6 +172,18 @@ def _is_blank_row(df: pd.DataFrame, r: int) -> bool:
     return True
 
 
+def _cache_bust() -> str:
+    """Sufiks query yang selalu berubah untuk URL export Google Sheets.
+
+    Endpoint gviz/export dilayani lewat CDN Google dan bisa mengembalikan
+    salinan LAMA beberapa menit setelah spreadsheet diubah, karena URL-nya
+    identik. URL fallback di bawah tidak lewat config.gsheet_csv_url(), jadi
+    tanpa ini merekalah yang diam-diam menyajikan data basi.
+    """
+    import time
+    return f"&_cb={int(time.time())}"
+
+
 def _safe_float(value) -> float:
     """Konversi ke float secara aman. Mengembalikan math.nan jika gagal.
     Menerima '1,5', '68%', '  ', None, tipe numerik."""
@@ -742,7 +754,8 @@ def load_backend_data(source: Optional[Union[str, pd.DataFrame]] = None) -> Back
             spreadsheet_id = SPREADSHEET_ID
         except ImportError:
             spreadsheet_id = "1YRvXt0AE-dVBVwRvLtsb57Qz8DYd9YbVQlVbRD31C7I"
-            primary_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/gviz/tq?tqx=out:csv&sheet=BACKEND"
+            primary_url = (f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
+                           f"/gviz/tq?tqx=out:csv&sheet=BACKEND{_cache_bust()}")
 
         errors = []
         try:
@@ -756,7 +769,8 @@ def load_backend_data(source: Optional[Union[str, pd.DataFrame]] = None) -> Back
         # Fallback: coba URL export berbasis gid spesifik tab BACKEND (kadang gviz
         # butuh setting sharing yang berbeda dari endpoint export biasa).
         known_backend_gid = "1437049322"
-        fallback_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=csv&gid={known_backend_gid}"
+        fallback_url = (f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
+                        f"/export?format=csv&gid={known_backend_gid}{_cache_bust()}")
         try:
             raw = pd.read_csv(fallback_url, header=None, dtype=str)
             return parse_backend(raw)
@@ -834,7 +848,7 @@ def load_unit_data(source: Optional[Union[str, pd.DataFrame]] = None) -> Dict[st
         if UNIT_SHEET_GID:
             fallback_url = (
                 f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}"
-                f"/export?format=csv&gid={UNIT_SHEET_GID}"
+                f"/export?format=csv&gid={UNIT_SHEET_GID}{_cache_bust()}"
             )
             try:
                 raw = pd.read_csv(fallback_url, header=None, dtype=str)
@@ -902,7 +916,7 @@ def load_staff_data(source: Optional[Union[str, pd.DataFrame]] = None) -> List[S
         if STAFF_SHEET_GID:
             fallback_url = (
                 f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}"
-                f"/export?format=csv&gid={STAFF_SHEET_GID}"
+                f"/export?format=csv&gid={STAFF_SHEET_GID}{_cache_bust()}"
             )
             try:
                 raw = pd.read_csv(fallback_url, header=None, dtype=str)
