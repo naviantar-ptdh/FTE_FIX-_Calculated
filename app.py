@@ -46,6 +46,7 @@ from calculator import (
 from charts import num, rp, rp_short
 from config import (
     BASE_MECHANIC_HOURS,
+    CACHE_TTL_SECONDS,
     COST_RATE,
     MONTH_COLS,
     STAFF_COST_RATE,
@@ -76,7 +77,7 @@ theme.inject_css()
 # ---------------------------------------------------------------------------
 # Data loaders
 # ---------------------------------------------------------------------------
-@st.cache_data(ttl=600, show_spinner="Loading BACKEND reference data…")
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner="Loading BACKEND reference data…")
 def get_backend():
     if DEMO:
         import demo_data
@@ -84,7 +85,7 @@ def get_backend():
     return load_backend_data()
 
 
-@st.cache_data(ttl=600, show_spinner="Loading unit data per site…")
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner="Loading unit data per site…")
 def get_units():
     if DEMO:
         import demo_data
@@ -92,7 +93,7 @@ def get_units():
     return load_unit_data()
 
 
-@st.cache_data(ttl=600, show_spinner="Loading staff data…")
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner="Loading staff data…")
 def get_staff():
     if DEMO:
         import demo_data
@@ -737,14 +738,43 @@ def render_staff(staff: dict):
         unsafe_allow_html=True,
     )
 
+    def _skipped_report():
+        """Tampilkan baris Hasil Staff yang tidak ikut dihitung + alasannya.
+
+        Tanpa ini, baris yang sudah diisi di sheet tapi ditolak filter akan
+        hilang tanpa jejak — dan tidak ada cara menebak sebabnya dari layar.
+        """
+        sk = staff.get("skipped", [])
+        if not sk:
+            return
+        with st.expander(
+            f"⚠️ {len(sk)} baris Hasil Staff tidak ikut dihitung — lihat alasannya"
+        ):
+            st.dataframe(
+                pd.DataFrame(sk).rename(columns={
+                    "posisi": "Posisi", "category": "Category Posisi",
+                    "reason": "Alasan dilewati",
+                }),
+                width="stretch", hide_index=True,
+            )
+
     if not oper and not plan:
-        st.markdown(
-            theme.empty_state(
-                "No staff data",
-                "Fill in Area Kerja, Beban Admin, Jam Efektif, k and k spv on the "
-                "Hasil Staff sheet.", "🗂️"),
-            unsafe_allow_html=True,
-        )
+        found = staff.get("rows_found", 0)
+        if found:
+            st.warning(
+                f"Ada **{found} baris** untuk site ini di sheet Hasil Staff, "
+                f"tapi tidak satu pun lolos perhitungan. Rincian alasannya di bawah."
+            )
+        else:
+            st.markdown(
+                theme.empty_state(
+                    "No staff data",
+                    "Tidak ada baris untuk site ini di sheet Hasil Staff. "
+                    "Pastikan kolom Site berisi kode site yang sama persis.",
+                    "🗂️"),
+                unsafe_allow_html=True,
+            )
+        _skipped_report()
         return
 
     a, b = st.columns([1.55, 1], gap="small")
@@ -784,6 +814,10 @@ def render_staff(staff: dict):
                 ]),
                 unsafe_allow_html=True,
             )
+
+    # Sebagian baris bisa lolos sementara sisanya ditolak — laporannya tetap
+    # ditampilkan supaya angka yang kurang tidak terlihat "wajar" begitu saja.
+    _skipped_report()
 
 
 # ---------------------------------------------------------------------------
@@ -1704,6 +1738,13 @@ def main():
             with st.container(key="side_home_calc"):
                 if st.button("← Home", width="stretch", key="btn_home_calc"):
                     st.session_state.page = "landing"
+                    st.rerun()
+            # Halaman ini juga membaca BACKEND (jarak, load factor), jadi ikut
+            # diberi Reload — tanpa itu satu-satunya cara memaksa ambil ulang
+            # adalah menunggu TTL habis.
+            with st.container(key="calc_refresh"):
+                if st.button("Reload", width="stretch", key="calc_refresh_btn"):
+                    _clear_caches()
                     st.rerun()
         render_calculator_mode(backend)
         if DEMO:
