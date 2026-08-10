@@ -383,7 +383,8 @@ def compute_staff_fte(
     1:5 atas gabungan keduanya, karena pembulatan ke atas per grup memberi
     hasil yang berbeda.
 
-    Baris dengan data tidak lengkap dilewati diam-diam, seperti sebelumnya.
+    Baris dengan data tidak lengkap tetap dilewati (tidak mengubah angka),
+    tapi kini dicatat di kunci 'skipped' lengkap dengan alasannya.
     """
     def norm(s: str) -> str:
         return BackendData._normalize(s)
@@ -435,17 +436,44 @@ def compute_staff_fte(
 
     operational: List[dict] = []
     planner: List[dict] = []
+    skipped: List[dict] = []      # (posisi, kategori, alasan) — lihat docstring
+
+    def _skip(row, reason: str):
+        skipped.append({
+            "posisi": row.posisi or "(tanpa nama)",
+            "category": row.category_posisi or "(kosong)",
+            "reason": reason,
+        })
 
     for row in site_rows:
         cat_pos = row.category_posisi.strip().lower()
 
-        if any(math.isnan(x) for x in (row.area_kerja, row.beban_admin, row.jam_efektif)):
+        missing = [
+            name for name, val in (
+                ("Area Kerja", row.area_kerja),
+                ("Beban Admin", row.beban_admin),
+                ("Jam Efektif", row.jam_efektif),
+            ) if math.isnan(val)
+        ]
+        if missing:
+            _skip(row, "kolom kosong: " + ", ".join(missing))
+            continue
+
+        if cat_pos not in ("operational", "planner"):
+            _skip(row, f"Category Posisi '{row.category_posisi}' tidak dikenali "
+                       f"(harus persis 'Operational' atau 'Planner')")
             continue
 
         if cat_pos == "operational":
             h = row.jam_supervisi if not math.isnan(row.jam_supervisi) else site_h
             ewdy = row.ewdy if not math.isnan(row.ewdy) else site_ewdy
             if math.isnan(h) or math.isnan(ewdy):
+                kosong = []
+                if math.isnan(h):
+                    kosong.append("Jam Supervisi")
+                if math.isnan(ewdy):
+                    kosong.append("EWDY")
+                _skip(row, "kolom kosong di semua baris site ini: " + ", ".join(kosong))
                 continue
 
             pnorm = norm(row.posisi)
@@ -456,7 +484,9 @@ def compute_staff_fte(
             else:
                 match = mech_by_norm.get(pnorm)
                 if match is None:
-                    continue  # section tanpa unit di site ini -> disembunyikan
+                    _skip(row, f"Posisi '{row.posisi}' tidak cocok dengan section unit "
+                               f"mana pun di site ini")
+                    continue
                 jumlah_mekanik = _tot(match)
 
             k = row.k if not math.isnan(row.k) else 1.0
@@ -466,11 +496,15 @@ def compute_staff_fte(
             foreman = _staff_fte(row.beban_admin, jumlah_mekanik, k, h, ewdy,
                                  row.area_kerja, rasio, row.jam_efektif)
             if foreman is None:
-                continue  # k tidak wajar untuk baris ini -> dilewati, lihat _staff_fte
+                _skip(row, f"nilai k = {row.k} tidak wajar (hasilnya di luar "
+                           f"jangkauan angka)")
+                continue
             supervisor = _staff_fte(row.beban_admin, foreman, k_spv, 1.0, ewdy,
                                     row.area_kerja, rasio, row.jam_efektif)
             if supervisor is None:
-                continue  # k_spv tidak wajar untuk baris ini -> dilewati
+                _skip(row, f"nilai k spv = {row.k_spv} tidak wajar (hasilnya di "
+                           f"luar jangkauan angka)")
+                continue
             operational.append({
                 "posisi": row.posisi,
                 "jumlah_mekanik": jumlah_mekanik,
@@ -480,6 +514,7 @@ def compute_staff_fte(
 
         elif cat_pos == "planner":
             if row.rasio_roster is None or math.isnan(row.rasio_roster):
+                _skip(row, "kolom kosong: Rasio Roster")
                 continue
             foreman = math.ceil(
                 (row.beban_admin / row.jam_efektif * row.area_kerja) * row.rasio_roster
@@ -510,6 +545,11 @@ def compute_staff_fte(
         "superintendent_operational": supt_oper,
         "superintendent_planner": supt_plan,
         "superintendent": supt_oper + supt_plan,
+        # Baris yang tidak ikut dihitung, berikut alasannya. Sebelumnya baris
+        # semacam ini dibuang tanpa jejak, sehingga data yang sudah diisi di
+        # sheet tampak "tidak masuk" tanpa petunjuk apa pun.
+        "skipped": skipped,
+        "rows_found": len(site_rows),
     }
 
 
