@@ -22,11 +22,22 @@ STAFF_SHEET_GID = "997738201"
 UNIT_EDIT_PASSWORD = "DHRising"
 
 # Endpoint export CSV publik (spreadsheet harus di-share minimal "Anyone with link - Viewer")
+#
+# Parameter `_cb` (cache buster) WAJIB ada. Endpoint gviz/export Google
+# dilayani lewat CDN dan sering mengembalikan salinan LAMA selama beberapa
+# menit walau spreadsheet-nya sudah diubah. Karena URL-nya persis sama, CDN
+# menganggapnya permintaan yang sama. Menyisipkan nilai yang selalu berubah
+# membuat tiap pengambilan jadi URL unik, sehingga selalu menembus ke sumber.
+#
+# Ini tidak membuat aplikasi jadi sering menembak Google: URL hanya dibangun
+# saat cache Streamlit meleset (lihat CACHE_TTL_SECONDS), bukan tiap rerun.
 def gsheet_csv_url(sheet_name: str, spreadsheet_id: str = SPREADSHEET_ID) -> str:
     from urllib.parse import quote
+    import time
     return (
         f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
         f"/gviz/tq?tqx=out:csv&sheet={quote(sheet_name)}"
+        f"&_cb={int(time.time())}"
     )
 
 # Konstanta rumus (sesuai sheet "Final Calculation")
@@ -54,5 +65,13 @@ STAFF_COST_RATE = {
 ROLES = ["Mechanic", "Electric", "Welder"]
 MONTH_COLS = ["M1", "M2", "M3"]
 
-# Cache TTL untuk data BACKEND (detik)
-CACHE_TTL_SECONDS = 600
+# Cache TTL untuk data BACKEND (detik).
+#
+# Sengaja pendek: ketiga form (Engineering, OD & HCM, Plant & Maintenance)
+# menulis langsung ke spreadsheet, dan orang yang baru menyimpan nilai wajar
+# berharap angkanya segera terlihat di dashboard. TTL panjang membuat
+# perubahan seolah "tidak tersimpan" padahal sudah masuk ke sheet.
+#
+# Nilai ini dibaca app.py; jangan menulis angka ttl langsung di dekorator
+# @st.cache_data, nanti konstanta ini jadi tidak berpengaruh.
+CACHE_TTL_SECONDS = 60
