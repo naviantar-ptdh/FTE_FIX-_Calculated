@@ -90,6 +90,13 @@ STAFF_COST_RATE = {
     "Superintendent": 17_000_000,
 }
 
+# Span of control pada sheet 'PLM Operation'. SoC Supervisor dipakai untuk
+# menurunkan "Jam supervisi per Foreman/hari" = JamSupMekanik / SoC Supervisor
+# (C20 = C19/C17 di sheet). SoC Pengawas dicantumkan sebagai rujukan: nilainya
+# sudah terkandung dalam kolom Jam Supervisi di sheet Hasil Staff.
+SOC_MAX_PENGAWAS = 6      # 1 Foreman : 6 mekanik (referensi)
+SOC_MAX_SUPERVISOR = 3    # 1 Supervisor : 3 Foreman
+
 ROLES = ["Mechanic", "Electric", "Welder"]
 MONTH_COLS = ["M1", "M2", "M3"]
 
