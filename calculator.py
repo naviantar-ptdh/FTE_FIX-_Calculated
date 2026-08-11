@@ -112,9 +112,9 @@ def compute_fte_raw(inputs: FTEInput, backend: BackendData) -> dict:
 
     base_factor = (breakdown_hours / emhd) * inputs.populasi * ratio_shift / inputs.competency_factor
 
-    fte_mechanic = base_factor * load_mechanic * backend.raci["Mechanic"]
-    fte_electric = base_factor * load_electrican * backend.raci["Electric"]
-    fte_welder = base_factor * load_welder * backend.raci["Welder"]
+    fte_mechanic = base_factor * load_mechanic 
+    fte_electric = base_factor * load_electrican 
+    fte_welder = base_factor * load_welder 
 
     m_a, m_b, m_c = backend.split_mechanic
     e_a, e_b = backend.split_electrician
