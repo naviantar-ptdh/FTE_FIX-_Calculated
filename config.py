@@ -52,18 +52,42 @@ TRAVEL_DIVISOR = 30            # pembagi Jarak (KM) -> jam perjalanan (D4/30)
 # Cost rate per FTE (Rp) - ditetapkan eksplisit oleh user, bukan dari BACKEND
 COST_RATE = {
     "M1": 10_000_000,
-    "M2": 9_500_000,
-    "M3": 9_000_000,
+    "M2": 8_500_000,
+    "M3": 6_500_000,
 }
+
+# Tarif khusus per role. Role yang TIDAK terdaftar di sini memakai COST_RATE
+# di atas. Kunci role memakai nama internal ("Mechanic" / "Electric" /
+# "Welder"); "Electric" itulah yang tampil sebagai "Electrician" di layar.
+#
+# Electrician punya tarif sendiri karena rentang gajinya jauh lebih rapat
+# antar level (9 / 8,5 / 8 juta) dibanding mekanik (10 / 8,5 / 6,5 juta).
+ROLE_COST_RATE = {
+    "Electric": {
+        "M1": 9_000_000,
+        "M2": 8_500_000,
+        "M3": 8_000_000,
+    },
+}
+
+
+def cost_rate(role: str, month: str) -> int:
+    """Tarif per FTE untuk sebuah role di sebuah level.
+
+    Selalu pakai fungsi ini, jangan membaca COST_RATE langsung — kalau tidak,
+    tarif khusus per role akan terlewat di sebagian tabel saja dan angkanya
+    jadi tidak konsisten antar bagian dashboard.
+    """
+    return ROLE_COST_RATE.get(role, COST_RATE)[month]
 
 # Cost rate per staff FTE (Rp) - asumsi manual dari user, bukan dari BACKEND
 STAFF_COST_RATE = {
-    "Foreman": 9_500_000,
-    "Supervisor": 12_200_000,
-    "Planner": 9_500_000,      # sama dengan Foreman, sesuai arahan user
+    "Foreman": 9_000_000,
+    "Supervisor": 12_000_000,
+    "Planner": 9_000_000,      # sama dengan Foreman, sesuai arahan user
     # PLACEHOLDER - user belum memberi tarif Superintendent. Ganti angka ini
     # begitu tarif resminya ada; seluruh tabel Cost membacanya dari sini.
-    "Superintendent": 19_000_000,
+    "Superintendent": 17_000_000,
 }
 
 ROLES = ["Mechanic", "Electric", "Welder"]
