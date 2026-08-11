@@ -43,7 +43,11 @@ def gsheet_csv_url(sheet_name: str, spreadsheet_id: str = SPREADSHEET_ID) -> str
 # Konstanta rumus (sesuai sheet "Final Calculation")
 BASE_MECHANIC_HOURS = 12       # basis jam kerja mekanik/hari sebelum dikurangi Lost Time & travel
 HOURS_PER_DAY = 24             # basis 24 jam untuk breakdown hours
-TRAVEL_DIVISOR = 40            # pembagi Jarak (KM) -> jam perjalanan (D4/40)
+TRAVEL_DIVISOR = 30            # pembagi Jarak (KM) -> jam perjalanan (D4/30)
+# Sebelumnya 40 — itu salah salin. Kedua sheet acuan ('Final Calculation' dan
+# 'Final Calculation RACI Granular') sama-sama memakai =12-$D$5-($D$4/30).
+# Diverifikasi: dengan 30, kolom Mechanic cocok persis di 67 dari 67 baris
+# sheet RACI Granular; dengan 40 tidak ada satu pun yang cocok.
 
 # Cost rate per FTE (Rp) - ditetapkan eksplisit oleh user, bukan dari BACKEND
 COST_RATE = {
