@@ -6,7 +6,7 @@ Alur rumus (per unit / kategori equipment terpilih), mengikuti Final Calculation
     G   = Target Physical Availability (PA%)              -> input user
     H   = 1 - G                                             (Breakdown %)
     I   = 24 * H                                            (Breakdown Hours/hari)
-    J   = 12 - LostTime(Site) - (Jarak/40)                  (EMHD, jam efektif/hari)
+    J   = 12 - LostTime(Site) - (Jarak/30)                  (EMHD, jam efektif/hari)
 
     FTE_Mechanic    = ((I/J) * LoadMechanic    * Populasi * RatioShift(Site)) / CF * RACI_Mechanic
     FTE_Electrician = ((I/J) * LoadElectrican  * Populasi * RatioShift(Site)) / CF * RACI_Electrician
