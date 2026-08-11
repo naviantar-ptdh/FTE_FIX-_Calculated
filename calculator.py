@@ -6,7 +6,7 @@ Alur rumus (per unit / kategori equipment terpilih), mengikuti Final Calculation
     G   = Target Physical Availability (PA%)              -> input user
     H   = 1 - G                                             (Breakdown %)
     I   = 24 * H                                            (Breakdown Hours/hari)
-    J   = 12 - LostTime(Site) - (Jarak/30)                  (EMHD, jam efektif/hari)
+    J   = 12 - LostTime(Site) - (Jarak/40)                  (EMHD, jam efektif/hari)
 
     FTE_Mechanic    = ((I/J) * LoadMechanic    * Populasi * RatioShift(Site)) / CF * RACI_Mechanic
     FTE_Electrician = ((I/J) * LoadElectrican  * Populasi * RatioShift(Site)) / CF * RACI_Electrician
@@ -93,8 +93,29 @@ def compute_fte_raw(inputs: FTEInput, backend: BackendData) -> dict:
 
     row = backend.load_factor.loc[inputs.sub_category]
     load_mechanic = row["Load Mechanic"]
-    load_electrican = row["Load Electrican"]
-    load_welder = row["Load Welder"]
+
+    # PEMETAAN ROLE MENGIKUTI EXCEL, BUKAN JUDUL KOLOM BACKEND.
+    #
+    # Tabel Load Factor di BACKEND berjudul: Load Mechanic | Load Electrican |
+    # Load Welder (kolom D | E | F). Tapi kedua sheet acuan mengambil kolom E
+    # untuk output berjudul "Welder" dan kolom F untuk "Electrician":
+    #     Welder      = XLOOKUP(...,E$95:E$112)   -> kolom "Load Electrican"
+    #     Electrician = XLOOKUP(...,F$95:F$112)   -> kolom "Load Welder"
+    # Jadi Excel bertentangan dengan judul tabelnya sendiri.
+    #
+    # Kode ini sengaja mengikuti Excel supaya angka aplikasi bisa
+    # direkonsiliasi dengan laporan yang beredar. Diverifikasi pada 67 baris
+    # sheet RACI Granular: total Welder 30,54 dan Electrician 25,15 — persis
+    # sama dengan Excel.
+    #
+    # CATATAN yang belum terselesaikan: bukti dari data justru menunjukkan
+    # judul tabelnya yang benar dan label Excel yang tertukar. Contoh paling
+    # jelas Light Tower — Load Electrican 0,072 vs Load Welder 0,036; alat itu
+    # genset + lampu, beban listriknya memang wajar lebih besar dari beban las.
+    # Kalau nanti disepakati bahwa judul tabel yang dipakai, cukup tukar dua
+    # baris di bawah ini (dan perbaiki juga label kolom di Excel).
+    load_welder = row["Load Electrican"]
+    load_electrican = row["Load Welder"]
 
     ratio_shift = backend.ratio_shift[inputs.site]
     lost_time = backend.lost_time[inputs.site]
@@ -155,11 +176,15 @@ def compute_fte_raw(inputs: FTEInput, backend: BackendData) -> dict:
             "Lost Time (Site)": lost_time,
             "Ratio Shift (Site)": ratio_shift,
             "Load Mechanic": load_mechanic,
-            "Load Electrican": load_electrican,
-            "Load Welder": load_welder,
-            "RACI Mechanic": backend.raci["Mechanic"],
-            "RACI Electric": backend.raci["Electric"],
-            "RACI Welder": backend.raci["Welder"],
+            "Load utk Welder (kolom 'Load Electrican')": load_welder,
+            "Load utk Electrician (kolom 'Load Welder')": load_electrican,
+            # Proporsi RACI SENGAJA tidak ditampilkan di sini. Model yang
+            # dipakai adalah "RACI Granular": tiap role sudah punya kolom load
+            # factor sendiri, jadi tidak ada lagi pengali RACI seperti di sheet
+            # 'Final Calculation' yang lama. Menampilkannya di panel diagnostik
+            # membuat orang mengira angka ini ikut dikalikan — padahal tidak.
+            # (Membacanya juga sempat bikin crash saat seksi RACI tidak ada di
+            # BACKEND, karena backend.raci kosong.)
             "FTE Mechanic (raw)": fte_mechanic,
             "FTE Electric (raw)": fte_electric,
             "FTE Welder (raw)": fte_welder,
