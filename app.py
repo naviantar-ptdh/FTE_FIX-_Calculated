@@ -48,6 +48,8 @@ from config import (
     BASE_MECHANIC_HOURS,
     CACHE_TTL_SECONDS,
     COST_RATE,
+    ROLE_COST_RATE,
+    cost_rate,
     MONTH_COLS,
     STAFF_COST_RATE,
     TRAVEL_DIVISOR,
@@ -442,10 +444,11 @@ def cost_rows_by_section(summary: dict) -> list[tuple[str, dict]]:
     """Cost per section (bukan per role) untuk tabel Cost / Non-Staff."""
     rows = []
     for cat, v in summary["mechanic_by_category"].items():
-        rows.append((cat, {m: v.get(m, 0) * COST_RATE[m] for m in MONTH_COLS}))
-    rows.append(("Welder", {m: summary["welder_total"].get(m, 0) * COST_RATE[m]
+        rows.append((cat, {m: v.get(m, 0) * cost_rate("Mechanic", m)
+                           for m in MONTH_COLS}))
+    rows.append(("Welder", {m: summary["welder_total"].get(m, 0) * cost_rate("Welder", m)
                             for m in MONTH_COLS}))
-    rows.append(("Electrician", {m: summary["electric_total"].get(m, 0) * COST_RATE[m]
+    rows.append(("Electrician", {m: summary["electric_total"].get(m, 0) * cost_rate("Electric", m)
                                  for m in MONTH_COLS}))
     out = []
     for name, lv in rows:
@@ -868,6 +871,17 @@ def render_cost(summary: dict, cost: dict, staff: dict):
                 ),
                 unsafe_allow_html=True,
             )
+            # Role dengan tarif khusus ditulis terpisah; tanpa ini baris
+            # Electrician di tabel di atas tidak akan cocok kalau dihitung
+            # ulang memakai tarif umum.
+            for role, rates in ROLE_COST_RATE.items():
+                st.markdown(
+                    theme.assumption_note(
+                        f"Rate per {theme.ROLE_LABEL.get(role, role)} / month",
+                        [(m, rp_short(rates[m])) for m in MONTH_COLS],
+                    ),
+                    unsafe_allow_html=True,
+                )
     with b:
         with theme.card("cost_ns_donut", "Level share", "proportion of non-staff cost",
                         accent=theme.LEVEL_SHADES["M1"]):
@@ -966,9 +980,9 @@ def render_cost(summary: dict, cost: dict, staff: dict):
     grand_head = head_ns + tot_head["Tot"]
 
     ns_cost_role = {
-        "Mechanic": sum(mech[m] * COST_RATE[m] for m in MONTH_COLS) * factor,
-        "Welder": sum(weld.get(m, 0) * COST_RATE[m] for m in MONTH_COLS) * factor,
-        "Electrician": sum(elec.get(m, 0) * COST_RATE[m] for m in MONTH_COLS) * factor,
+        "Mechanic": sum(mech[m] * cost_rate("Mechanic", m) for m in MONTH_COLS) * factor,
+        "Welder": sum(weld.get(m, 0) * cost_rate("Welder", m) for m in MONTH_COLS) * factor,
+        "Electrician": sum(elec.get(m, 0) * cost_rate("Electric", m) for m in MONTH_COLS) * factor,
     }
     st_cost_role = {r: (gc["Operational"][r] + gc["Planner"][r]) for r in STAFF_ROLES}
 
