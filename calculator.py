@@ -192,7 +192,58 @@ def compute_fte_raw(inputs: FTEInput, backend: BackendData) -> dict:
     }
 
 
-def aggregate_units(raw_results: List[dict], round_result: bool = True) -> dict:
+def _largest_remainder(weights: dict, target: int) -> dict:
+    """Bagikan `target` kursi bulat sesuai bobot, memakai metode sisa terbesar.
+    Jumlah hasilnya dijamin persis sama dengan `target`."""
+    keys = list(weights)
+    out = {k: 0 for k in keys}
+    total_w = sum(weights[k] for k in keys)
+    if target <= 0 or total_w <= 0:
+        return out
+    frac = {}
+    for k in keys:
+        exact = weights[k] / total_w * target
+        out[k] = int(math.floor(exact))
+        frac[k] = exact - out[k]
+    sisa = target - sum(out.values())
+    for k in sorted(keys, key=lambda x: frac[x], reverse=True)[:sisa]:
+        out[k] += 1
+    return out
+
+
+def _apportion_ceil_total(sums: dict) -> dict:
+    """Bulatkan KE ATAS satu kali di TOTAL FTE, lalu bagikan orangnya BERTAHAP:
+    total -> per role, baru per role -> per level.
+
+    Urutannya penting. Kalau kursi dibagikan langsung ke sembilan sel
+    (role x level) sekaligus, role dengan banyak sel bisa mengambil lebih dari
+    haknya: untuk contoh Big Digger, Mechanic sempat dapat 4 orang (dari tiga
+    selnya) sehingga Electric kebagian 0 — padahal proporsinya hanya 68% dari
+    5 orang, yaitu 3. Dengan dua tahap, pembagian antar role dihitung dulu
+    memakai total mentah tiap role, baru angka bulat itu dipecah ke M1/M2/M3.
+
+    Keduanya memakai metode sisa terbesar, jadi rincian selalu berjumlah persis
+    sama dengan totalnya dan tidak ada angka yang dibulatkan dua kali.
+    """
+    role_raw = {role: sum(sums[role][m] for m in MONTH_COLS) for role in ROLES}
+    total_raw = sum(role_raw.values())
+    target = int(math.ceil(total_raw - 1e-9))
+
+    out = {role: {m: 0 for m in MONTH_COLS} for role in ROLES}
+    if target <= 0 or total_raw <= 0:
+        return out
+
+    # Tahap 1: total -> per role
+    per_role = _largest_remainder(role_raw, target)
+    # Tahap 2: tiap role -> per level
+    for role in ROLES:
+        out[role] = _largest_remainder(
+            {m: sums[role][m] for m in MONTH_COLS}, per_role[role]
+        )
+    return out
+
+
+def aggregate_units(raw_results: List[dict], round_mode: str = "round") -> dict:
     """Jumlahkan nilai RAW (belum dibulatkan) dari seluruh unit/baris,
     BARU dibulatkan SATU KALI per role/kolom -- persis formula
     `P47 = ROUND(SUM(P9:P46), 0)` di sheet 'Final Calculation'.
@@ -200,13 +251,13 @@ def aggregate_units(raw_results: List[dict], round_result: bool = True) -> dict:
     `raw_results` adalah list dari output `compute_fte_raw()["raw"]` untuk
     setiap unit yang dihitung.
 
-    `round_result=False` mematikan pembulatan sama sekali. Itu dipakai mode
-    Kalkulator (SATU unit), karena pembulatan per level menghancurkan angka
-    kecil: untuk 1 Big Exca, Welder 0,70 pecah jadi M1 0,30 dan M2 0,40 yang
-    masing-masing membulat ke 0 — sehingga Welder dan Electrician tampil 0
-    padahal Excel menulis 0,7 dan 0,5. Pembulatan hanya masuk akal setelah
-    banyak unit dijumlahkan (Basecase/Summary), persis seperti Excel yang
-    membiarkan tiap BARIS berupa desimal dan baru ROUND di baris total.
+    round_mode:
+      "round" — pembulatan biasa per level (dipakai Basecase & Summary,
+                setara ROUND(SUM(...)) di baris total Excel).
+      "ceil"  — dibulatkan KE ATAS sekali saja di TOTAL FTE, lalu dibagi ke
+                role/level. Dipakai mode Kalkulator karena hasilnya dibaca
+                sebagai jumlah ORANG yang harus disiapkan.
+      "none"  — tanpa pembulatan, sama persis dengan satu baris Excel.
     """
     sums = {role: {m: 0.0 for m in MONTH_COLS} for role in ROLES}
     for raw in raw_results:
@@ -215,11 +266,14 @@ def aggregate_units(raw_results: List[dict], round_result: bool = True) -> dict:
                 sums[role][m] += raw[role][m]
 
     fte_table = {}
+    ceil_cells = _apportion_ceil_total(sums) if round_mode == "ceil" else None
     for role in ROLES:
-        if round_result:
-            fte_table[role] = {m: excel_round(sums[role][m]) for m in MONTH_COLS}
-        else:
+        if round_mode == "ceil":
+            fte_table[role] = dict(ceil_cells[role])
+        elif round_mode == "none":
             fte_table[role] = {m: sums[role][m] for m in MONTH_COLS}
+        else:
+            fte_table[role] = {m: excel_round(sums[role][m]) for m in MONTH_COLS}
         # Tot = SUM(M1:M3) yang SUDAH dibulatkan, persis AH10 = SUM(AE10:AG10)
         fte_table[role]["Tot"] = sum(fte_table[role][m] for m in MONTH_COLS)
 
@@ -590,17 +644,17 @@ def compute_staff_fte(
 
 
 def compute_fte(inputs: FTEInput, backend: BackendData,
-                round_result: bool = True) -> dict:
+                round_mode: str = "round") -> dict:
     """Kompatibilitas mundur: hitung SATU unit lalu langsung agregasi
     (setara dengan aggregate_units([raw]) untuk satu unit saja).
     Untuk banyak unit sekaligus, JANGAN panggil fungsi ini per-unit lalu
     dijumlahkan manual -- pakai compute_fte_raw() + aggregate_units() supaya
     skema round-nya benar (round sekali di total, bukan round per-unit).
 
-    Mode Kalkulator memanggilnya dengan `round_result=False` agar hasilnya
-    sama dengan satu baris di sheet Excel (desimal, bukan bilangan bulat).
+    Mode Kalkulator memanggilnya dengan `round_mode="ceil"` karena hasilnya
+    dibaca sebagai jumlah orang yang harus disiapkan.
     """
     result = compute_fte_raw(inputs, backend)
-    agg = aggregate_units([result["raw"]], round_result=round_result)
+    agg = aggregate_units([result["raw"]], round_mode=round_mode)
     agg["intermediate"] = result["intermediate"]
     return agg
