@@ -1227,6 +1227,10 @@ def render_calculator_mode(backend):
                     pa_percent=pa, populasi=jumlah_unit,
                 ),
                 backend,
+                # Satu unit saja: pembulatan per level akan menghapus role
+                # kecil (Welder 0,70 -> 0). Excel pun membiarkan tiap baris
+                # berupa desimal, jadi di sini ikut apa adanya.
+                round_result=False,
             )
         except CalculationError as exc:
             st.error(f"Calculation failed: {exc}")
@@ -1267,7 +1271,7 @@ def render_calculator_mode(backend):
             st.markdown(
                 theme.donut_legend([
                     (theme.ROLE_COLORS[r], theme.ROLE_LABEL[r],
-                     f"{num(result['fte'][r]['Tot'])} MPP",
+                     f"{num(result['fte'][r]['Tot'], 2)} MPP",
                      f"{num(result['fte'][r]['Tot'] / grand * 100, 1)}%")
                     for r in ("Mechanic", "Electric", "Welder")
                 ]),
@@ -1283,9 +1287,9 @@ def render_calculator_mode(backend):
                         accent=theme.BRAND["orange_deep"]):
             st.markdown(
                 theme.calc_readout(
-                    total_fte=num(tot["Tot"]),
+                    total_fte=num(tot["Tot"], 2),
                     levels=[
-                        (m, theme.LEVEL_NOTE[m], num(tot[m]), rp(cost_lv[m]))
+                        (m, theme.LEVEL_NOTE[m], num(tot[m], 2), rp(cost_lv[m]))
                         for m in MONTH_COLS
                     ],
                     grand_label="Estimated cost<br/>per month",
@@ -1299,8 +1303,8 @@ def render_calculator_mode(backend):
             rows, sums = [], {"M1": 0.0, "M2": 0.0, "M3": 0.0, "Tot": 0.0}
             for role in ("Mechanic", "Electric", "Welder"):
                 v = result["fte"][role]
-                rows.append([theme.ROLE_LABEL[role], num(v["M1"]), num(v["M2"]),
-                             num(v["M3"]), num(v["Tot"])])
+                rows.append([theme.ROLE_LABEL[role], num(v["M1"], 2), num(v["M2"], 2),
+                             num(v["M3"], 2), num(v["Tot"], 2)])
                 for kk in sums:
                     sums[kk] += v.get(kk, 0)
             st.markdown(
