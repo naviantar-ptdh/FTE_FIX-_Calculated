@@ -50,7 +50,8 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict, List, Optional
 
 from config import (BASE_MECHANIC_HOURS, HOURS_PER_DAY, TRAVEL_DIVISOR,
-                    COST_RATE, cost_rate, ROLES, MONTH_COLS)
+                    COST_RATE, cost_rate, ROLES, MONTH_COLS,
+                    SOC_MAX_SUPERVISOR)
 from data_loader import BackendData, UnitRow, StaffRow
 
 
@@ -109,14 +110,17 @@ def compute_fte_raw(inputs: FTEInput, backend: BackendData) -> dict:
     # sheet RACI Granular: total Welder 30,54 dan Electrician 25,15 — persis
     # sama dengan Excel.
     #
-    # CATATAN yang belum terselesaikan: bukti dari data justru menunjukkan
-    # judul tabelnya yang benar dan label Excel yang tertukar. Contoh paling
-    # jelas Light Tower — Load Electrican 0,072 vs Load Welder 0,036; alat itu
-    # genset + lampu, beban listriknya memang wajar lebih besar dari beban las.
-    # Kalau nanti disepakati bahwa judul tabel yang dipakai, cukup tukar dua
-    # baris di bawah ini (dan perbaiki juga label kolom di Excel).
-    load_welder = row["Load Electrican"]
-    load_electrican = row["Load Welder"]
+    # DIPUTUSKAN: judul tabel yang dipakai, bukan urutan kolom di sheet
+    # 'Final Calculation'. Dua bukti yang sejalan:
+    #   1. Proporsi RACI di BACKEND — Electric 0,1934 > Welder 0,1281. Load
+    #      factornya harus mengikuti urutan itu (0,54 untuk Electrician,
+    #      0,42 untuk Welder), bukan sebaliknya.
+    #   2. Light Tower — Load Electrican 0,072 vs Load Welder 0,036; alat itu
+    #      genset + lampu, beban listriknya memang wajar lebih besar.
+    # Konsekuensinya: kolom berjudul "Welder"/"Electrician" di sheet Excel
+    # tertukar dan perlu ditukar di sana.
+    load_electrican = row["Load Electrican"]
+    load_welder = row["Load Welder"]
 
     ratio_shift = backend.ratio_shift[inputs.site]
     lost_time = backend.lost_time[inputs.site]
@@ -590,20 +594,42 @@ def compute_staff_fte(
                 jumlah_mekanik = _tot(match)
 
             k = row.k if not math.isnan(row.k) else 1.0
-            k_spv = row.k_spv if not math.isnan(row.k_spv) else 1.0
             rasio = row.rasio_roster if not math.isnan(row.rasio_roster) else 1.0
 
-            foreman = _staff_fte(row.beban_admin, jumlah_mekanik, k, h, ewdy,
-                                 row.area_kerja, rasio, row.jam_efektif)
-            if foreman is None:
+            # Rumus sheet 'PLM Operation' (F/G/I/J pada blok "Perhitungan
+            # Pengawas"). Kolom "Foreman 1:5" dan "Supervisor 1:3" di sheet itu
+            # SENGAJA tidak dipakai — yang dipakai MPPlan Foreman (G) dan
+            # FTE Supv (J), sesuai keputusan.
+            #
+            #   FTE Pengawas = (BebanAdmin + (Mech^k x JamSupMek x EWDY) x Area) / JamEfektifTahun
+            #   Foreman      = CEILING(FTE Pengawas x RasioRoster)
+            #   FTE Supv     = (BebanAdmin + (Foreman^k x EWDY x JamSupForeman x Area)) / JamEfektifTahun
+            #   Supervisor   = CEILING(FTE Supv x RasioRoster)
+            #
+            # JamSupForeman = JamSupMek / SoC max Supervisor (C20 = C19/C17).
+            # Perhatikan: eksponen Supervisor memakai k YANG SAMA, bukan kolom
+            # 'k spv' — kolom itu tidak lagi terpakai untuk baris Operational.
+            jam_sup_foreman = h / SOC_MAX_SUPERVISOR if SOC_MAX_SUPERVISOR else h
+            try:
+                fte_pengawas = (
+                    row.beban_admin
+                    + ((jumlah_mekanik ** k) * h * ewdy) * row.area_kerja
+                ) / row.jam_efektif
+                foreman = int(math.ceil(fte_pengawas * rasio - 1e-9))
+            except (OverflowError, ZeroDivisionError, ValueError):
                 _skip(row, f"nilai k = {row.k} tidak wajar (hasilnya di luar "
                            f"jangkauan angka)")
                 continue
-            supervisor = _staff_fte(row.beban_admin, foreman, k_spv, 1.0, ewdy,
-                                    row.area_kerja, rasio, row.jam_efektif)
-            if supervisor is None:
-                _skip(row, f"nilai k spv = {row.k_spv} tidak wajar (hasilnya di "
-                           f"luar jangkauan angka)")
+
+            try:
+                fte_supv = (
+                    row.beban_admin
+                    + ((foreman ** k) * ewdy * jam_sup_foreman * row.area_kerja)
+                ) / row.jam_efektif
+                supervisor = int(math.ceil(fte_supv * rasio - 1e-9))
+            except (OverflowError, ZeroDivisionError, ValueError):
+                _skip(row, f"perhitungan Supervisor untuk '{row.posisi}' di luar "
+                           f"jangkauan angka")
                 continue
             operational.append({
                 "posisi": row.posisi,
