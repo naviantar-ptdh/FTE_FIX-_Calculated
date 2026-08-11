@@ -192,13 +192,21 @@ def compute_fte_raw(inputs: FTEInput, backend: BackendData) -> dict:
     }
 
 
-def aggregate_units(raw_results: List[dict]) -> dict:
+def aggregate_units(raw_results: List[dict], round_result: bool = True) -> dict:
     """Jumlahkan nilai RAW (belum dibulatkan) dari seluruh unit/baris,
     BARU dibulatkan SATU KALI per role/kolom -- persis formula
     `P47 = ROUND(SUM(P9:P46), 0)` di sheet 'Final Calculation'.
 
     `raw_results` adalah list dari output `compute_fte_raw()["raw"]` untuk
     setiap unit yang dihitung.
+
+    `round_result=False` mematikan pembulatan sama sekali. Itu dipakai mode
+    Kalkulator (SATU unit), karena pembulatan per level menghancurkan angka
+    kecil: untuk 1 Big Exca, Welder 0,70 pecah jadi M1 0,30 dan M2 0,40 yang
+    masing-masing membulat ke 0 — sehingga Welder dan Electrician tampil 0
+    padahal Excel menulis 0,7 dan 0,5. Pembulatan hanya masuk akal setelah
+    banyak unit dijumlahkan (Basecase/Summary), persis seperti Excel yang
+    membiarkan tiap BARIS berupa desimal dan baru ROUND di baris total.
     """
     sums = {role: {m: 0.0 for m in MONTH_COLS} for role in ROLES}
     for raw in raw_results:
@@ -208,7 +216,10 @@ def aggregate_units(raw_results: List[dict]) -> dict:
 
     fte_table = {}
     for role in ROLES:
-        fte_table[role] = {m: excel_round(sums[role][m]) for m in MONTH_COLS}
+        if round_result:
+            fte_table[role] = {m: excel_round(sums[role][m]) for m in MONTH_COLS}
+        else:
+            fte_table[role] = {m: sums[role][m] for m in MONTH_COLS}
         # Tot = SUM(M1:M3) yang SUDAH dibulatkan, persis AH10 = SUM(AE10:AG10)
         fte_table[role]["Tot"] = sum(fte_table[role][m] for m in MONTH_COLS)
 
@@ -578,14 +589,18 @@ def compute_staff_fte(
     }
 
 
-def compute_fte(inputs: FTEInput, backend: BackendData) -> dict:
+def compute_fte(inputs: FTEInput, backend: BackendData,
+                round_result: bool = True) -> dict:
     """Kompatibilitas mundur: hitung SATU unit lalu langsung agregasi
     (setara dengan aggregate_units([raw]) untuk satu unit saja).
     Untuk banyak unit sekaligus, JANGAN panggil fungsi ini per-unit lalu
     dijumlahkan manual -- pakai compute_fte_raw() + aggregate_units() supaya
     skema round-nya benar (round sekali di total, bukan round per-unit).
+
+    Mode Kalkulator memanggilnya dengan `round_result=False` agar hasilnya
+    sama dengan satu baris di sheet Excel (desimal, bukan bilangan bulat).
     """
     result = compute_fte_raw(inputs, backend)
-    agg = aggregate_units([result["raw"]])
+    agg = aggregate_units([result["raw"]], round_result=round_result)
     agg["intermediate"] = result["intermediate"]
     return agg
