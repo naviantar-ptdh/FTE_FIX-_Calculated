@@ -49,7 +49,8 @@ from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict, List, Optional
 
-from config import BASE_MECHANIC_HOURS, HOURS_PER_DAY, TRAVEL_DIVISOR, COST_RATE, ROLES, MONTH_COLS
+from config import (BASE_MECHANIC_HOURS, HOURS_PER_DAY, TRAVEL_DIVISOR,
+                    COST_RATE, cost_rate, ROLES, MONTH_COLS)
 from data_loader import BackendData, UnitRow, StaffRow
 
 
@@ -282,11 +283,20 @@ def aggregate_units(raw_results: List[dict], round_mode: str = "round") -> dict:
     fte_table["Total"] = total_row
 
     cost_table = {}
-    for role in ROLES + ["Total"]:
+    for role in ROLES:
         cost_table[role] = {
-            month: fte_table[role][month] * COST_RATE[month] for month in MONTH_COLS
+            month: fte_table[role][month] * cost_rate(role, month)
+            for month in MONTH_COLS
         }
         cost_table[role]["Tot"] = sum(cost_table[role][m] for m in MONTH_COLS)
+
+    # Baris Total DIJUMLAHKAN dari role, bukan dari FTE total dikali tarif.
+    # Sejak tiap role bisa punya tarif sendiri, "FTE total x tarif" tidak lagi
+    # sama dengan jumlah biaya sebenarnya.
+    cost_table["Total"] = {
+        month: sum(cost_table[role][month] for role in ROLES) for month in MONTH_COLS
+    }
+    cost_table["Total"]["Tot"] = sum(cost_table["Total"][m] for m in MONTH_COLS)
 
     return {"fte": fte_table, "cost": cost_table}
 
@@ -417,7 +427,7 @@ def compute_site_cost(
 
     cost_table = {}
     for role, fte in fte_by_role.items():
-        cost_table[role] = {m: fte.get(m, 0.0) * COST_RATE[m] for m in MONTH_COLS}
+        cost_table[role] = {m: fte.get(m, 0.0) * cost_rate(role, m) for m in MONTH_COLS}
         cost_table[role]["Tot"] = sum(cost_table[role][m] for m in MONTH_COLS)
 
     total_row = {m: sum(cost_table[role][m] for role in fte_by_role) for m in MONTH_COLS}
