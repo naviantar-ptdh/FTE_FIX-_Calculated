@@ -749,9 +749,14 @@ def compute_staff_fte(
                 # TotalMekanik = seluruh mekanik site (Mechanic + Welder +
                 # Electrician dijumlahkan), BUKAN per section — training
                 # dipandang sebagai satu program untuk seluruh site.
+                allowance = (
+                    row.training_allowance
+                    if not math.isnan(row.training_allowance)
+                    else TRAINING_ALLOWANCE_PER_MECH
+                )
                 try:
                     beban_training = (
-                        TRAINING_ALLOWANCE_PER_MECH
+                        allowance
                         * (total_mekanik_site ** K_TRAINING)
                         * TRAINING_DURATION_PER_EVENT
                     )
@@ -781,13 +786,19 @@ def compute_staff_fte(
             foreman = int(math.ceil(
                 (row.beban_admin / row.jam_efektif) * row.rasio_roster - 1e-9
             ))
-            # Supervisor Planner untuk posisi ini tetap dilookup dari kolom
-            # "FTE SPV" di sheet, karena sheet acuannya belum punya rumus
-            # Supervisor tersendiri untuk tiap posisi.
-            supervisor = (
-                int(row.fte_spv_lookup)
-                if not math.isnan(row.fte_spv_lookup) else 0
-            )
+            # Supervisor: kolom "Beban Kerja Administratif Supervisor" kini ada
+            # di sheet, jadi dihitung dengan pola yang sama seperti Foreman.
+            # Kalau kolom itu kosong, jatuh kembali ke lookup kolom "FTE SPV"
+            # seperti perilaku sebelumnya.
+            if not math.isnan(row.beban_admin_spv) and row.beban_admin_spv > 0:
+                supervisor = int(math.ceil(
+                    (row.beban_admin_spv / row.jam_efektif) * row.rasio_roster - 1e-9
+                ))
+            else:
+                supervisor = (
+                    int(row.fte_spv_lookup)
+                    if not math.isnan(row.fte_spv_lookup) else 0
+                )
             planner.append({
                 "posisi": row.posisi,
                 "foreman": foreman,
