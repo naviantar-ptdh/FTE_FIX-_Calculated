@@ -122,6 +122,45 @@ PLANNER_MATERIAL_DURATION = 4.0
 # Posisi Planner LAIN memakai rumus sederhana (BebanAdmin / JamEfektif).
 MAINTENANCE_PLANNING_POSITION = "Maintenance Planning"
 
+# v9: rumus FTE Supv Planner berubah. Sebelumnya beban material dibagi
+# (1 + jumlah Foreman section itu) — pola itu ternyata bug salin-rumus di
+# Excel (tiap baris ikut mereferensi F baris SEBELUMNYA). Sekarang beban
+# material dibagi konstanta "SoC max Supervisi" (baris baru di sheet
+# 'PLM Planner', nilainya 3 di kedua site contoh — 1 Supervisor mengawasi
+# rata-rata 3 unit beban).
+SOC_MAX_SUPERVISI_PLANNER = 3
+
+# --- Maintenance Training (sheet 'Maintenance Training') --------------------
+# Formula: beban training = AllowancePerMech x (TotalMekanik ^ K_TRAINING)
+#          x DurasiPerEvent, lalu ikut pola Foreman/Supervisor yang sama
+#          dengan Planner (Foreman = (BebanAdmin+Beban)/JamEfektif;
+#          Supervisor = (BebanAdmin+Beban/SoC)/JamEfektif).
+#
+# Ketiga angka di bawah SERAGAM untuk semua site, jadi disimpan sebagai
+# konstanta di sini — bukan sebagai kolom di sheet 'Hasil Staff'. Menaruhnya
+# di sheet hanya akan mengundang salah isi antar-site padahal nilainya
+# memang tidak boleh berbeda.
+#
+# K_TRAINING: skor checklist 14 pertanyaan Ya/Tidak di sheet 'k Training'
+# (C16 = SUM(Ya=1/Tidak=0)/14). Checklist itu menilai KARAKTERISTIK jenis
+# pekerjaan training (butuh sertifikasi, risiko K3, dll), bukan kondisi
+# per-site — karena itu satu nilai untuk semua site.
+K_TRAINING = 12 / 14
+
+# Berapa kali seorang mekanik ditraining dalam setahun.
+TRAINING_ALLOWANCE_PER_MECH = 3
+
+# Jam per event training = (720 - 78 - 60) / 60 = 9,7 jam.
+TRAINING_DURATION_PER_EVENT = (720 - 78 - 60) / 60
+
+MAINTENANCE_TRAINING_POSITION = "Maintenance Training"
+
+# SoC max Trainer TIDAK dijadikan konstanta seperti SOC_MAX_SUPERVISI_PLANNER,
+# karena nilainya di sheet (kolom "SoC max Trainer"/"SoC max Pengawas")
+# ternyata identik dengan SOC_MAX_SUPERVISI_PLANNER (=3) di kedua contoh.
+# Dipakai ulang supaya tidak ada dua konstanta yang harus dijaga tetap sama
+# secara manual; kalau nanti perlu beda, pisahkan lagi jadi konstanta sendiri.
+
 ROLES = ["Mechanic", "Electric", "Welder"]
 MONTH_COLS = ["M1", "M2", "M3"]
 
