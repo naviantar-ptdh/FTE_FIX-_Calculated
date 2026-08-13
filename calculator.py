@@ -52,7 +52,10 @@ from typing import Dict, List, Optional
 from config import (BASE_MECHANIC_HOURS, HOURS_PER_DAY, TRAVEL_DIVISOR,
                     COST_RATE, cost_rate, ROLES, MONTH_COLS,
                     SOC_MAX_SUPERVISOR, PLANNER_SECTIONS, PLANNER_SECTION_MAP,
-                    PLANNER_MATERIAL_DURATION, MAINTENANCE_PLANNING_POSITION)
+                    PLANNER_MATERIAL_DURATION, MAINTENANCE_PLANNING_POSITION,
+                    SOC_MAX_SUPERVISI_PLANNER, K_TRAINING,
+                    TRAINING_ALLOWANCE_PER_MECH, TRAINING_DURATION_PER_EVENT,
+                    MAINTENANCE_TRAINING_POSITION)
 from data_loader import BackendData, UnitRow, StaffRow
 
 
@@ -182,8 +185,8 @@ def compute_fte_raw(inputs: FTEInput, backend: BackendData) -> dict:
             "Lost Time (Site)": lost_time,
             "Ratio Shift (Site)": ratio_shift,
             "Load Mechanic": load_mechanic,
-            "Load utk Welder (kolom 'Load Electrican')": load_welder,
-            "Load utk Electrician (kolom 'Load Welder')": load_electrican,
+            "Load Welder": load_welder,
+            "Load Electrican": load_electrican,
             # Proporsi RACI SENGAJA tidak ditampilkan di sini. Model yang
             # dipakai adalah "RACI Granular": tiap role sudah punya kolom load
             # factor sendiri, jadi tidak ada lagi pengali RACI seperti di sheet
@@ -552,6 +555,15 @@ def compute_staff_fte(
     mech_by_norm = {norm(k): v for k, v in mechanic_by_category.items()}
     site_rows = [r for r in staff_rows if r.site.strip().lower() == site.strip().lower()]
 
+    # Dipakai formula Maintenance Training: total mekanik = SELURUH mekanik
+    # site (semua section + Welder + Electrician dijumlahkan), bukan per
+    # section — sheet acuan memakai satu angka "Jumlah Mekanik" untuk seluruh
+    # site (mis. 228, 302).
+    total_mekanik_site = (
+        sum(_tot(v) for v in mechanic_by_category.values())
+        + _tot(welder_total) + _tot(electric_total)
+    )
+
     # Jam supervisi dipakai bersama satu site; baris Planner mengosongkannya di
     # sheet, jadi nilainya diambil dari baris Operational site yang sama.
     site_h = next(
@@ -672,23 +684,31 @@ def compute_staff_fte(
             is_maint_planning = (
                 norm(row.posisi) == norm(MAINTENANCE_PLANNING_POSITION)
             )
+            is_maint_training = (
+                norm(row.posisi) == norm(MAINTENANCE_TRAINING_POSITION)
+            )
 
             if is_maint_planning and planner_load:
-                # Rumus sheet 'PLM Planner'. Satu baris "Maintenance Planning"
-                # di Hasil Staff mewakili SELURUH section planner, jadi tiap
-                # section dihitung sendiri lalu dijumlahkan.
+                # Rumus sheet 'PLM Planner' (v9). Satu baris "Maintenance
+                # Planning" di Hasil Staff mewakili SELURUH section planner,
+                # jadi tiap section dihitung sendiri lalu dijumlahkan.
                 #
                 #   FTE Foreman(sec) = (BebanAdmin + LoadPlanner(sec) x Durasi)
                 #                      / JamEfektif
                 #   MPPlan Foreman   = CEILING(FTE Foreman x RasioRoster)
                 #   FTE Supv(sec)    = (BebanAdmin
-                #                       + (LoadPlanner(sec) x Durasi)
-                #                         / (1 + MPPlanForeman(sec)))
+                #                       + (LoadPlanner(sec) x Durasi) / SoC)
                 #                      / JamEfektif
                 #   Supervisor       = ROUNDUP(SUM FTE Supv seluruh section)
                 #
-                # Pembagi (1 + N) mencerminkan beban material dibagi ke Foreman
-                # yang ada PLUS Supervisor-nya sendiri.
+                # CATATAN PERBAIKAN: versi sebelumnya membagi beban material
+                # dengan (1 + jumlah Foreman section itu). Sheet acuan yang
+                # baru menggantinya dengan SATU konstanta "SoC max Supervisi"
+                # (=3) untuk semua section — dan setelah dicek ulang, rumus
+                # (1+N) di sheet LAMA ternyata bug salin-formula (baris
+                # Hauler/Auxilary/Support semua ikut mereferensi kolom F
+                # Digger). Jadi ini bukan cuma ganti angka, tapi memperbaiki
+                # bug yang sudah ada di sheet lama.
                 foreman = 0
                 fte_supv_total = 0.0
                 sec_detail = []
@@ -698,7 +718,7 @@ def compute_staff_fte(
                     n_sec = int(math.ceil(fte_f * row.rasio_roster - 1e-9))
                     foreman += n_sec
                     fte_supv_total += (
-                        row.beban_admin + material / (1 + n_sec)
+                        row.beban_admin + material / SOC_MAX_SUPERVISI_PLANNER
                     ) / row.jam_efektif
                     sec_detail.append({
                         "section": sec, "material": material, "foreman": n_sec,
@@ -710,6 +730,46 @@ def compute_staff_fte(
                     "fte": foreman,
                     "supervisor": supervisor,
                     "sections": sec_detail,
+                })
+                continue
+
+            if is_maint_training:
+                # Rumus sheet 'Maintenance Training':
+                #
+                #   BebanTraining = Allowance x (TotalMekanik ^ K_TRAINING)
+                #                   x DurasiPerEvent
+                #   FTE Foreman   = (BebanAdmin + BebanTraining) / JamEfektif
+                #   MPP Foreman   = CEILING(FTE Foreman x RasioRoster)
+                #   FTE Supv      = (BebanAdmin + BebanTraining/SoC) / JamEfektif
+                #   MPP Supv      = CEILING(FTE Supv x RasioRoster)
+                #
+                # Allowance, durasi, dan K_TRAINING seragam untuk semua site,
+                # jadi diambil dari config — tidak perlu kolom di sheet.
+                #
+                # TotalMekanik = seluruh mekanik site (Mechanic + Welder +
+                # Electrician dijumlahkan), BUKAN per section — training
+                # dipandang sebagai satu program untuk seluruh site.
+                try:
+                    beban_training = (
+                        TRAINING_ALLOWANCE_PER_MECH
+                        * (total_mekanik_site ** K_TRAINING)
+                        * TRAINING_DURATION_PER_EVENT
+                    )
+                    fte_f = (row.beban_admin + beban_training) / row.jam_efektif
+                    foreman = int(math.ceil(fte_f * row.rasio_roster - 1e-9))
+                    fte_s = (
+                        row.beban_admin + beban_training / SOC_MAX_SUPERVISI_PLANNER
+                    ) / row.jam_efektif
+                    supervisor = int(math.ceil(fte_s * row.rasio_roster - 1e-9))
+                except (OverflowError, ValueError, ZeroDivisionError):
+                    _skip(row, f"jumlah mekanik ({total_mekanik_site:.0f}) "
+                               f"menghasilkan angka di luar jangkauan")
+                    continue
+                planner.append({
+                    "posisi": row.posisi,
+                    "foreman": foreman,
+                    "fte": foreman,
+                    "supervisor": supervisor,
                 })
                 continue
 
