@@ -51,7 +51,8 @@ from typing import Dict, List, Optional
 
 from config import (BASE_MECHANIC_HOURS, HOURS_PER_DAY, TRAVEL_DIVISOR,
                     COST_RATE, cost_rate, ROLES, MONTH_COLS,
-                    SOC_MAX_SUPERVISOR)
+                    SOC_MAX_SUPERVISOR, PLANNER_SECTIONS, PLANNER_SECTION_MAP,
+                    PLANNER_MATERIAL_DURATION, MAINTENANCE_PLANNING_POSITION)
 from data_loader import BackendData, UnitRow, StaffRow
 
 
@@ -393,10 +394,34 @@ def compute_site_summary(
     electric_total = {m: excel_round(electric_sum[m]) for m in MONTH_COLS}
     electric_total["Tot"] = sum(electric_total[m] for m in MONTH_COLS)
 
+    # --- Beban Material & Parts Requirement Planning per section ------------
+    # Sheet 'PLM Planner' kolom I: Sigma(Load Planner alat x jumlah unit),
+    # dikelompokkan ke 4 section planner. Nilai ini nanti dikali durasi (kolom
+    # H) di compute_staff_fte. Kalau kolom "Load Planner" belum ada di BACKEND,
+    # semua section bernilai 0 dan rumus planner otomatis jatuh kembali ke
+    # bentuk sederhananya (BebanAdmin / JamEfektif) tanpa error.
+    planner_load = {sec: 0.0 for sec in PLANNER_SECTIONS}
+    planner_lf_missing = []
+    for u in unit_rows:
+        orig_sc = backend.original_sub_name(u.category) or u.category
+        if orig_sc not in backend.load_factor.index:
+            continue
+        lf = backend.load_factor.loc[orig_sc].get("Load Planner", math.nan)
+        cat_name = backend.category_for(u.category) or ""
+        sec = PLANNER_SECTION_MAP.get(cat_name.strip().lower())
+        if sec is None:
+            continue
+        if lf is None or (isinstance(lf, float) and math.isnan(lf)):
+            planner_lf_missing.append(orig_sc)
+            continue
+        planner_load[sec] += float(lf) * u.jumlah_unit
+
     return {
         "mechanic_by_category": mechanic_by_category,
         "welder_total": welder_total,
         "electric_total": electric_total,
+        "planner_load": planner_load,
+        "planner_lf_missing": sorted(set(planner_lf_missing)),
         "detail_rows": detail_rows,
         "skipped_units": skipped_units,
         "jarak_km": jarak_km,
@@ -450,6 +475,7 @@ def compute_staff_fte(
     welder_total: Dict[str, float],
     electric_total: Dict[str, float],
     staff_rows: List[StaffRow],
+    planner_load: Dict[str, float] | None = None,
 ) -> dict:
     """Foreman / Supervisor / Superintendent per site, sheet 'Hasil Staff' (v3).
 
@@ -642,13 +668,62 @@ def compute_staff_fte(
             if row.rasio_roster is None or math.isnan(row.rasio_roster):
                 _skip(row, "kolom kosong: Rasio Roster")
                 continue
-            foreman = math.ceil(
-                (row.beban_admin / row.jam_efektif * row.area_kerja) * row.rasio_roster
+
+            is_maint_planning = (
+                norm(row.posisi) == norm(MAINTENANCE_PLANNING_POSITION)
             )
-            # Supervisor Planner TIDAK dihitung ulang: nilainya dilookup dari
-            # kolom "FTE SPV" di sheet (di workbook terbaru kolom itu memang
-            # berisi angka, bukan rumus), supaya perubahan di spreadsheet
-            # langsung terbawa ke sini.
+
+            if is_maint_planning and planner_load:
+                # Rumus sheet 'PLM Planner'. Satu baris "Maintenance Planning"
+                # di Hasil Staff mewakili SELURUH section planner, jadi tiap
+                # section dihitung sendiri lalu dijumlahkan.
+                #
+                #   FTE Foreman(sec) = (BebanAdmin + LoadPlanner(sec) x Durasi)
+                #                      / JamEfektif
+                #   MPPlan Foreman   = CEILING(FTE Foreman x RasioRoster)
+                #   FTE Supv(sec)    = (BebanAdmin
+                #                       + (LoadPlanner(sec) x Durasi)
+                #                         / (1 + MPPlanForeman(sec)))
+                #                      / JamEfektif
+                #   Supervisor       = ROUNDUP(SUM FTE Supv seluruh section)
+                #
+                # Pembagi (1 + N) mencerminkan beban material dibagi ke Foreman
+                # yang ada PLUS Supervisor-nya sendiri.
+                foreman = 0
+                fte_supv_total = 0.0
+                sec_detail = []
+                for sec in PLANNER_SECTIONS:
+                    material = planner_load.get(sec, 0.0) * PLANNER_MATERIAL_DURATION
+                    fte_f = (row.beban_admin + material) / row.jam_efektif
+                    n_sec = int(math.ceil(fte_f * row.rasio_roster - 1e-9))
+                    foreman += n_sec
+                    fte_supv_total += (
+                        row.beban_admin + material / (1 + n_sec)
+                    ) / row.jam_efektif
+                    sec_detail.append({
+                        "section": sec, "material": material, "foreman": n_sec,
+                    })
+                supervisor = int(math.ceil(fte_supv_total - 1e-9))
+                planner.append({
+                    "posisi": row.posisi,
+                    "foreman": foreman,
+                    "fte": foreman,
+                    "supervisor": supervisor,
+                    "sections": sec_detail,
+                })
+                continue
+
+            # Posisi Planner lain (Condition Monitoring, PLM Engineering,
+            # Plant Manpower, dst.): hanya beban administratif, tanpa beban
+            # material — sesuai sheet CondMon / PLM Engineer / PLM Manpower /
+            # Maintenance Training / EHWA yang semuanya berbentuk
+            # FTE = BebanAdmin / JamEfektif, lalu dikali Rasio Roster.
+            foreman = int(math.ceil(
+                (row.beban_admin / row.jam_efektif) * row.rasio_roster - 1e-9
+            ))
+            # Supervisor Planner untuk posisi ini tetap dilookup dari kolom
+            # "FTE SPV" di sheet, karena sheet acuannya belum punya rumus
+            # Supervisor tersendiri untuk tiap posisi.
             supervisor = (
                 int(row.fte_spv_lookup)
                 if not math.isnan(row.fte_spv_lookup) else 0
