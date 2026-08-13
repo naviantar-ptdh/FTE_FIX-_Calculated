@@ -661,6 +661,12 @@ class StaffRow:
     k: float = float("nan")
     k_spv: float = float("nan")
     fte_spv_lookup: float = float("nan")
+    # Kolom baru di sheet: beban administratif khusus Supervisor. Dipakai
+    # posisi Planner biasa, yang Supervisor-nya punya beban sendiri.
+    beban_admin_spv: float = float("nan")
+    # Kolom baru: berapa kali seorang mekanik ditraining per tahun. Dibaca
+    # dari sheet kalau ada; kalau kosong dipakai konstanta di config.
+    training_allowance: float = float("nan")
 
 
 def parse_staff_sheet(raw: pd.DataFrame) -> List[StaffRow]:
@@ -675,6 +681,59 @@ def parse_staff_sheet(raw: pd.DataFrame) -> List[StaffRow]:
         raise BackendDataError(f"Header 'Posisi' tidak ditemukan pada sheet Hasil Staff.{detail}")
 
     records: List[StaffRow] = []
+
+    # Kolom dicari BERDASARKAN NAMA HEADER, bukan posisi tetap.
+    #
+    # Ini sudah dua kali jadi sumber bug: setiap kali ada kolom baru
+    # disisipkan di tengah (terakhir "Beban Kerja Administratif Supervisor"),
+    # seluruh indeks setelahnya bergeser dan parser diam-diam membaca kolom
+    # yang salah — tanpa error, hanya angka yang aneh atau baris yang hilang.
+    # Dengan pencarian nama, urutan kolom boleh berubah sesuka hati.
+    def _col_idx(*aliases: str) -> Optional[int]:
+        """Cari indeks kolom yang judulnya cocok salah satu alias.
+
+        Pencocokan longgar (huruf/angka saja, tanpa spasi & tanda baca)
+        supaya "Jam kerja Efektif Staff" tetap ketemu walau nanti ditulis
+        "Jam Kerja Efektif  Staff".
+        """
+        norm = lambda s: "".join(ch for ch in str(s).lower() if ch.isalnum())
+        wanted = [norm(a) for a in aliases]
+        for c in range(df.shape[1]):
+            head = norm(_cell(df, header_idx, c) or "")
+            if head and head in wanted:
+                return c
+        return None
+
+    IDX = {
+        "category": _col_idx("Category posisi", "Category Posisi"),
+        "site": _col_idx("Site"),
+        "rasio": _col_idx("Rasio Roster"),
+        "area": _col_idx("Area Kerja"),
+        "beban": _col_idx("Beban Kerja Administratif"),
+        "beban_spv": _col_idx("Beban Kerja Administratif Supervisor"),
+        "jam_efektif": _col_idx("Jam kerja Efektif Staff", "Jam Kerja Efektif Staff"),
+        "jam_sup": _col_idx("Jam Supervisi"),
+        "ewdy": _col_idx("EWDY"),
+        "k": _col_idx("k"),
+        "k_spv": _col_idx("k spv"),
+        "fte_spv": _col_idx("FTE SPV"),
+        "training_allowance": _col_idx("Training Mech Per-Tahun",
+                                       "Training Mech Per Tahun"),
+    }
+
+    wajib = ("category", "site", "rasio", "beban", "jam_efektif")
+    hilang = [k for k in wajib if IDX[k] is None]
+    if hilang:
+        raise BackendDataError(
+            "Kolom berikut tidak ditemukan di sheet 'Hasil Staff': "
+            + ", ".join(hilang)
+            + ". Pastikan judul kolomnya tidak diubah/dihapus."
+        )
+
+    def _num(r: int, key: str) -> float:
+        c = IDX[key]
+        return _safe_float(_cell(df, r, c)) if c is not None else math.nan
+
     r = header_idx + 1
     while r < len(df):
         if _is_blank_row(df, r):
@@ -686,26 +745,19 @@ def parse_staff_sheet(raw: pd.DataFrame) -> List[StaffRow]:
             continue
         records.append(StaffRow(
             posisi=posisi,
-            category_posisi=_col_text(df, r, 1),
-            site=_col_text(df, r, 2),
-            # Indeks kolom mengikuti layout sheet 'Hasil Staff':
-            #   0 Posisi | 1 Category posisi | 2 Site | 3 Jumlah Mechanic
-            #   4 Rasio Roster | 5 Area Kerja | 6 Beban Kerja Administratif
-            #   7 Jam kerja Efektif Staff | 8 Jam Supervisi | 9 EWDY
-            #   10 k | 11 k spv | 12 Contoh FTE | 13 Rumus FTE | 14 FTE SPV
-            # Sebelumnya semua indeks dari Rasio Roster ke kanan bergeser satu
-            # ke kiri, sehingga `k` justru membaca kolom EWDY (nilainya 253).
-            # Karena k dipakai sebagai eksponen (base ** k), itu membuat hasil
-            # meledak jadi angka astronomis atau OverflowError.
-            rasio_roster=_safe_float(_cell(df, r, 4)),
-            area_kerja=_safe_float(_cell(df, r, 5)),
-            beban_admin=_safe_float(_cell(df, r, 6)),
-            jam_efektif=_safe_float(_cell(df, r, 7)),
-            jam_supervisi=_safe_float(_cell(df, r, 8)),
-            ewdy=_safe_float(_cell(df, r, 9)),
-            k=_safe_float(_cell(df, r, 10)),
-            k_spv=_safe_float(_cell(df, r, 11)),
-            fte_spv_lookup=_safe_float(_cell(df, r, 14)),
+            category_posisi=_col_text(df, r, IDX["category"]),
+            site=_col_text(df, r, IDX["site"]),
+            rasio_roster=_num(r, "rasio"),
+            area_kerja=_num(r, "area"),
+            beban_admin=_num(r, "beban"),
+            beban_admin_spv=_num(r, "beban_spv"),
+            jam_efektif=_num(r, "jam_efektif"),
+            jam_supervisi=_num(r, "jam_sup"),
+            ewdy=_num(r, "ewdy"),
+            k=_num(r, "k"),
+            k_spv=_num(r, "k_spv"),
+            fte_spv_lookup=_num(r, "fte_spv"),
+            training_allowance=_num(r, "training_allowance"),
         ))
         r += 1
     return records
