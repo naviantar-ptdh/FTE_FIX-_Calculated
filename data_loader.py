@@ -309,6 +309,10 @@ def parse_backend(raw: pd.DataFrame) -> BackendData:
     col_mech = _find_col("mechanic")
     col_elec = _find_col("electr")  # menangkap "Electrican"/"Electrician" (typo aman)
     col_weld = _find_col("welder")
+    # Kolom OPSIONAL (v8): load factor untuk Maintenance Planning. Kalau belum
+    # ditambahkan di BACKEND, nilainya NaN dan beban material planner otomatis
+    # dianggap nol — perhitungan lain tidak terganggu.
+    col_plan = _find_col("planner")
 
     if col_sub is None:
         raise BackendDataError("Kolom 'Sub Category' tidak ditemukan pada header Load Factor.")
@@ -329,6 +333,7 @@ def parse_backend(raw: pd.DataFrame) -> BackendData:
             "Load Mechanic": _safe_float(_cell(df, r, col_mech)) if col_mech is not None else math.nan,
             "Load Electrican": _safe_float(_cell(df, r, col_elec)) if col_elec is not None else math.nan,
             "Load Welder": _safe_float(_cell(df, r, col_weld)) if col_weld is not None else math.nan,
+            "Load Planner": _safe_float(_cell(df, r, col_plan)) if col_plan is not None else math.nan,
         }
         lf_records.append(rec)
 
