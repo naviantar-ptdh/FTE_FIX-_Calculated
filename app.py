@@ -193,6 +193,7 @@ def aggregate_all_sites(backend, units_all) -> dict | None:
             staff = compute_staff_fte(
                 s, summ["mechanic_by_category"], summ["welder_total"],
                 summ["electric_total"], get_staff(),
+                planner_load=summ.get("planner_load"),
             )
         except (CalculationError, BackendDataError, KeyError, ValueError):
             staff = {"operational": [], "planner": [],
@@ -1439,6 +1440,7 @@ def render_basecase_mode(backend):
         staff_res = compute_staff_fte(
             site, summary["mechanic_by_category"], summary["welder_total"],
             summary["electric_total"], get_staff(),
+            planner_load=summary.get("planner_load"),
         )
         cost = compute_site_cost(
             summary["mechanic_by_category"], summary["welder_total"],
