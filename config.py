@@ -97,6 +97,31 @@ STAFF_COST_RATE = {
 SOC_MAX_PENGAWAS = 6      # 1 Foreman : 6 mekanik (referensi)
 SOC_MAX_SUPERVISOR = 3    # 1 Supervisor : 3 Foreman
 
+# --- Maintenance Planning (sheet 'PLM Planner') -----------------------------
+# Beban "Material & Parts Requirement Planning" dipecah per SECTION planner.
+# Section planner hanya 4, sedangkan Category unit di BACKEND ada 5 — Auxilary
+# Track dan Auxilary Wheel digabung jadi satu section "Auxilary".
+PLANNER_SECTIONS = ["Digger", "Hauler", "Auxilary", "Support"]
+
+PLANNER_SECTION_MAP = {
+    "digger": "Digger",
+    "hauler": "Hauler",
+    "auxilary track": "Auxilary",
+    "auxilary wheel": "Auxilary",
+    "auxiliary track": "Auxilary",
+    "auxiliary wheel": "Auxilary",
+    "support & facility": "Support",
+    "support": "Support",
+}
+
+# Durasi (jam) per kegiatan Material & Parts Requirement Planning — kolom H
+# pada sheet 'PLM Planner'. Bernilai 4 untuk keempat section.
+PLANNER_MATERIAL_DURATION = 4.0
+
+# Nama posisi di sheet 'Hasil Staff' yang memakai rumus dengan beban material.
+# Posisi Planner LAIN memakai rumus sederhana (BebanAdmin / JamEfektif).
+MAINTENANCE_PLANNING_POSITION = "Maintenance Planning"
+
 ROLES = ["Mechanic", "Electric", "Welder"]
 MONTH_COLS = ["M1", "M2", "M3"]
 
