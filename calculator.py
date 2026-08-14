@@ -56,7 +56,8 @@ from config import (BASE_MECHANIC_HOURS, HOURS_PER_DAY, TRAVEL_DIVISOR,
                     SOC_MAX_SUPERVISI_PLANNER, K_TRAINING,
                     TRAINING_ALLOWANCE_PER_MECH, TRAINING_DURATION_PER_EVENT,
                     MAINTENANCE_TRAINING_POSITION,
-                    OPERATION_SHIFT, SUPERVISOR_PER_FOREMAN_OPS)
+                    OPERATION_SHIFT, SUPERVISOR_PER_FOREMAN_OPS,
+                    NO_OPERATOR_CATEGORIES)
 from data_loader import BackendData, UnitRow, StaffRow
 
 
@@ -441,18 +442,26 @@ def compute_operation_manpower(
 
     Mengikuti "Panduan Standardisasi Metode Perhitungan MPP Operation":
 
-        Operator          = CEILING(SUM(nEquipment x PA) x FR_operator)
-        Equipment Foreman = (nOperator / Shift) / 150 x Shift x FR_foreman
+        Operator          = SUM( CEILING(nUnit x PA x FR_operator) ) per BARIS
+                            (kategori tanpa operator dikecualikan)
+        Equipment Foreman = CEILING(nOperator / 150 x Shift x FR_foreman)
         Mine Foreman      -> diisi manual di BACKEND
         Disposal Foreman  -> diisi manual di BACKEND
         PIT Service Fmn   -> diisi manual di BACKEND
-        Supervisor        = Total Foreman / 4          (rasio 1:4)
+        Supervisor        = CEILING(Total Foreman / 4)     (rasio 1:4)
         Superintendent    -> diisi manual di BACKEND
 
-    Semua angka dibulatkan KE ATAS, sama seperti sisi Plant & Maintenance:
-    hasilnya jumlah orang, dan kebutuhan 10,4 orang tetap berarti harus
-    menyiapkan 11. Pembulatan dilakukan di angka akhir tiap level, bukan di
-    tiap komponen, supaya kelebihannya tidak menumpuk.
+    Dua hal yang mudah salah dan sudah disamakan dengan sheet:
+
+    1. Operator dibulatkan KE ATAS PER BARIS unit, lalu dijumlahkan — bukan
+       dijumlahkan dulu baru dibulatkan sekali. Bedanya nyata: untuk KCP,
+       per-baris menghasilkan 691 sementara agregat hanya 677, karena tiap
+       baris menyumbang pecahannya sendiri.
+    2. Kategori di NO_OPERATOR_CATEGORIES (mis. Pump) TIDAK butuh operator dan
+       dikecualikan. Di sheet kolom Operator-nya memang dikosongkan.
+
+    Semua angka dibulatkan KE ATAS: hasilnya jumlah orang, dan kebutuhan 10,4
+    orang tetap berarti harus menyiapkan 11.
 
     Nilai yang tidak tersedia dikembalikan sebagai None, BUKAN nol — supaya
     tabel bisa menampilkan "-" dan tidak ada yang mengira angka kosong itu
@@ -465,45 +474,46 @@ def compute_operation_manpower(
         return int(math.ceil(x - 1e-9)) if x is not None else None
 
     # --- Operator ---
-    operator_raw = None
+    operator = None
     if fr_opt:
-        total_eqp_pa = 0.0
+        total = 0
         for u in unit_rows:
+            if u.category.strip().lower() in NO_OPERATOR_CATEGORIES:
+                continue
             pa = u.pa / 100.0 if u.pa > 1 else u.pa   # sheet menulis 85, bukan 0,85
-            total_eqp_pa += u.jumlah_unit * pa
-        operator_raw = total_eqp_pa * fr_opt
+            total += _ceil(u.jumlah_unit * pa * fr_opt)
+        operator = total
 
     # --- Foreman ---
     mine_fmn = backend.mine_foreman_ops.get(site)
     disposal_fmn = backend.disposal_foreman_ops.get(site)
     pit_fmn = backend.pit_service_foreman_ops.get(site)
 
-    # Equipment Foreman: 1 foreman per 150 operator PER SHIFT.
-    # nOperator hasil rumus di atas adalah kebutuhan TOTAL (sudah termasuk
-    # faktor rasio), jadi jumlah per shift = total / Shift. Dipakai nilai
-    # MENTAH operator, bukan yang sudah dibulatkan, supaya pembulatan tidak
-    # ikut terkali dua kali.
+    # Equipment Foreman: 1 foreman per 150 operator, per shift.
+    # Shift adalah PENGALI penuh di sini — jangan "bagi shift lalu kali shift"
+    # karena keduanya saling meniadakan dan hasilnya jadi setengahnya
+    # (KCP: 11 padahal sheet menulis 21).
     equip_fmn = None
-    if operator_raw is not None and fr_fmn:
-        equip_fmn = (operator_raw / OPERATION_SHIFT) / 150.0 * OPERATION_SHIFT * fr_fmn
+    if operator is not None and fr_fmn:
+        equip_fmn = _ceil(operator / 150.0 * OPERATION_SHIFT * fr_fmn)
 
     parts = [x for x in (mine_fmn, disposal_fmn, pit_fmn, equip_fmn) if x is not None]
-    foreman_raw = sum(parts) if parts else None
+    foreman = sum(parts) if parts else None
 
     # --- Supervisor & Superintendent ---
-    supervisor_raw = (
-        foreman_raw / SUPERVISOR_PER_FOREMAN_OPS if foreman_raw is not None else None
+    supervisor = (
+        _ceil(foreman / SUPERVISOR_PER_FOREMAN_OPS) if foreman is not None else None
     )
     superintendent = backend.superintendent_ops.get(site)
 
     return {
-        "operator": _ceil(operator_raw),
+        "operator": operator,
         "mine_foreman": mine_fmn,
         "disposal_foreman": disposal_fmn,
         "pit_service_foreman": pit_fmn,
-        "equipment_foreman": _ceil(equip_fmn),
-        "foreman": _ceil(foreman_raw),
-        "supervisor": _ceil(supervisor_raw),
+        "equipment_foreman": equip_fmn,
+        "foreman": _ceil(foreman),
+        "supervisor": supervisor,
         "superintendent": _ceil(superintendent),
         # dipakai UI untuk menjelaskan kenapa sebuah angka kosong
         "missing": [
