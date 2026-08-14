@@ -721,7 +721,7 @@ def render_control_ratio(summary: dict, staff: dict, ops: dict):
                 unsafe_allow_html=True,
             )
         st.markdown(
-            '<div class="dh-note">Plant & Maintenance Department: Calculated based on the PLM Operational standard.'
+            '<div class="dh-note">Plant & Maintenance Department: Calculated based on the PLM Operational standard. '
             'Operations Department: Calculated based on the applicable standards.</div>',
             unsafe_allow_html=True,
         )
