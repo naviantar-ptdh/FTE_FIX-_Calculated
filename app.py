@@ -721,10 +721,8 @@ def render_control_ratio(summary: dict, staff: dict, ops: dict):
                 unsafe_allow_html=True,
             )
         st.markdown(
-            '<div class="dh-note">Operator = Σ(Jumlah Unit × PA) × Faktor Rasio '
-            'Operator. Equipment Foreman dihitung dari jumlah operator; Mine, '
-            'Disposal dan PIT Service Foreman diambil dari BACKEND. Supervisor '
-            'Operation = Total Foreman ÷ 4. Semua angka dibulatkan ke atas.</div>',
+            '<div class="dh-note">Plant & Maintenance Department: Calculated based on the PLM Operational standard.'
+            'Operations Department: Calculated based on the applicable standards.</div>',
             unsafe_allow_html=True,
         )
 
