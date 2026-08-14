@@ -1653,6 +1653,7 @@ DIRECTORATES = {
                  "mechanic working hour.",
         "url": "https://script.google.com/macros/s/AKfycbxTMCA17k_yqY-WjZWXera6D_LYfk3M5lwwxRU08O-WLZeT5iASFe6_Vsbg6vIvDMPB2w/exec",
     },
+# https://script.google.com/macros/s/AKfycbzBvyiQuA6QBkQZha2gcPGv5-9RzonD7XUjQzHyfQfaXQUGSiQiaYI3TtiChPI4PTNj/exec (Link terbaru untuk Plant)
     "plant": {
         "icon": "optimizing.png",
         "title": "Plant & Maintenance",
