@@ -77,6 +77,17 @@ class BackendData:
     # slider manual di sidebar.
     competency_factor: Dict[str, float] = field(default_factory=dict)  # Site -> TCF
 
+    # --- Sisi Operation, untuk tabel "Control Manpower Ratio" --------------
+    # Semuanya per site dan diisi manual di sheet BACKEND. Empatnya opsional:
+    # kalau seksinya belum ada, nilainya kosong dan tabel menampilkan "-"
+    # alih-alih angka karangan.
+    fr_operator: Dict[str, float] = field(default_factory=dict)        # Faktor Rasio Operator (2,8 / 3,1)
+    fr_foreman_ops: Dict[str, float] = field(default_factory=dict)     # Faktor Rasio Foreman Operation (2,2 / 2,7)
+    mine_foreman_ops: Dict[str, float] = field(default_factory=dict)   # Jumlah Mine Foreman
+    disposal_foreman_ops: Dict[str, float] = field(default_factory=dict)  # Jumlah Disposal Foreman
+    pit_service_foreman_ops: Dict[str, float] = field(default_factory=dict)  # Jumlah PIT Service Foreman
+    superintendent_ops: Dict[str, float] = field(default_factory=dict) # Jumlah Superintendent Operation
+
     DEFAULT_COMPETENCY_FACTOR = 0.8
 
     def tcf_for(self, site: Optional[str]) -> float:
@@ -524,6 +535,52 @@ def parse_backend(raw: pd.DataFrame) -> BackendData:
             BackendData.DEFAULT_COMPETENCY_FACTOR,
         )
 
+    # =========================================================
+    # Seksi sisi OPERATION (opsional). Semua berbentuk sama: judul, lalu
+    # pasangan "Site | angka". Dibaca lewat satu helper supaya menambah seksi
+    # baru nanti cukup menambah satu baris di daftar di bawah.
+    # =========================================================
+    def _read_site_values(*titles: str) -> Dict[str, float]:
+        """Baca seksi 'judul' lalu pasangan Site->angka di bawahnya."""
+        idx = None
+        for t in titles:
+            idx = _find_title_row(df, t)
+            if idx is not None:
+                break
+        if idx is None:
+            return {}
+        j = idx + 1
+        while j < len(df) and _is_blank_row(df, j):
+            j += 1
+        # baris header "Site | Ratio" dilewati kalau ada
+        if j < len(df) and "site" in _col_text(df, j, 0).lower():
+            j += 1
+        out: Dict[str, float] = {}
+        pairs, _end = _read_vertical_pairs_safe(df, j)
+        for site, val in pairs:
+            v = _safe_float(val)
+            if v == v:                     # bukan NaN
+                out[site] = v
+        return out
+
+    # Catatan: judul "Faktor Rasio Operator" di sheet memakai kolom B berisi
+    # nama site contoh ("ACP"), jadi pencarian judul cukup pakai kolom A.
+    fr_operator = _read_site_values("faktor rasio operator", "factor ratio operator")
+    fr_foreman_ops = _read_site_values(
+        "faktor rasio foreman", "faktor rasio foreman operation",
+        "factor ratio foreman operation", "faktor rasio foreman & supervisor",
+    )
+    mine_foreman_ops = _read_site_values(
+        "jumlah mine foreman operation", "jumlah mine foreman", "mine foreman")
+    disposal_foreman_ops = _read_site_values(
+        "jumlah disposal foreman operation", "jumlah disposal foreman",
+        "disposal foreman")
+    pit_service_foreman_ops = _read_site_values(
+        "jumlah pit service foreman operation", "jumlah pit service foreman",
+        "pit service foreman")
+    superintendent_ops = _read_site_values(
+        "jumlah superintendent operation", "superintendent operation")
+
     sites = list(ratio_shift.keys()) or list(lost_time.keys())
 
     bd = BackendData(
@@ -542,6 +599,12 @@ def parse_backend(raw: pd.DataFrame) -> BackendData:
         classification=classification,
         classification_order=classification_order,
         competency_factor=competency_factor,
+        fr_operator=fr_operator,
+        fr_foreman_ops=fr_foreman_ops,
+        mine_foreman_ops=mine_foreman_ops,
+        disposal_foreman_ops=disposal_foreman_ops,
+        pit_service_foreman_ops=pit_service_foreman_ops,
+        superintendent_ops=superintendent_ops,
     )
     return bd
 
