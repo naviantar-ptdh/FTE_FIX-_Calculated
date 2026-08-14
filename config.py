@@ -161,6 +161,14 @@ MAINTENANCE_TRAINING_POSITION = "Maintenance Training"
 # Dipakai ulang supaya tidak ada dua konstanta yang harus dijaga tetap sama
 # secara manual; kalau nanti perlu beda, pisahkan lagi jadi konstanta sendiri.
 
+# --- Sisi Operation (panduan "Standardisasi Perhitungan MPP Operation") ----
+# Jumlah shift yang berlaku. Dipakai rumus Foreman; rumus operator TIDAK
+# memakainya (faktor shift sudah terkandung di Faktor Rasio Operator).
+OPERATION_SHIFT = 2
+
+# Rasio Supervisor : Foreman di fungsi Operation (panduan poin 1 = 1:4).
+SUPERVISOR_PER_FOREMAN_OPS = 4
+
 ROLES = ["Mechanic", "Electric", "Welder"]
 MONTH_COLS = ["M1", "M2", "M3"]
 
