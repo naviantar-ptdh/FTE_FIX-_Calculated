@@ -55,7 +55,8 @@ from config import (BASE_MECHANIC_HOURS, HOURS_PER_DAY, TRAVEL_DIVISOR,
                     PLANNER_MATERIAL_DURATION, MAINTENANCE_PLANNING_POSITION,
                     SOC_MAX_SUPERVISI_PLANNER, K_TRAINING,
                     TRAINING_ALLOWANCE_PER_MECH, TRAINING_DURATION_PER_EVENT,
-                    MAINTENANCE_TRAINING_POSITION)
+                    MAINTENANCE_TRAINING_POSITION,
+                    OPERATION_SHIFT, SUPERVISOR_PER_FOREMAN_OPS)
 from data_loader import BackendData, UnitRow, StaffRow
 
 
@@ -428,6 +429,93 @@ def compute_site_summary(
         "detail_rows": detail_rows,
         "skipped_units": skipped_units,
         "jarak_km": jarak_km,
+    }
+
+
+def compute_operation_manpower(
+    site: str,
+    unit_rows: List[UnitRow],
+    backend: BackendData,
+) -> dict:
+    """Manpower sisi OPERATION untuk tabel "Control Manpower Ratio".
+
+    Mengikuti "Panduan Standardisasi Metode Perhitungan MPP Operation":
+
+        Operator          = CEILING(SUM(nEquipment x PA) x FR_operator)
+        Equipment Foreman = (nOperator / Shift) / 150 x Shift x FR_foreman
+        Mine Foreman      -> diisi manual di BACKEND
+        Disposal Foreman  -> diisi manual di BACKEND
+        PIT Service Fmn   -> diisi manual di BACKEND
+        Supervisor        = Total Foreman / 4          (rasio 1:4)
+        Superintendent    -> diisi manual di BACKEND
+
+    Semua angka dibulatkan KE ATAS, sama seperti sisi Plant & Maintenance:
+    hasilnya jumlah orang, dan kebutuhan 10,4 orang tetap berarti harus
+    menyiapkan 11. Pembulatan dilakukan di angka akhir tiap level, bukan di
+    tiap komponen, supaya kelebihannya tidak menumpuk.
+
+    Nilai yang tidak tersedia dikembalikan sebagai None, BUKAN nol — supaya
+    tabel bisa menampilkan "-" dan tidak ada yang mengira angka kosong itu
+    berarti "memang tidak butuh orang".
+    """
+    fr_opt = backend.fr_operator.get(site)
+    fr_fmn = backend.fr_foreman_ops.get(site)
+
+    def _ceil(x):
+        return int(math.ceil(x - 1e-9)) if x is not None else None
+
+    # --- Operator ---
+    operator_raw = None
+    if fr_opt:
+        total_eqp_pa = 0.0
+        for u in unit_rows:
+            pa = u.pa / 100.0 if u.pa > 1 else u.pa   # sheet menulis 85, bukan 0,85
+            total_eqp_pa += u.jumlah_unit * pa
+        operator_raw = total_eqp_pa * fr_opt
+
+    # --- Foreman ---
+    mine_fmn = backend.mine_foreman_ops.get(site)
+    disposal_fmn = backend.disposal_foreman_ops.get(site)
+    pit_fmn = backend.pit_service_foreman_ops.get(site)
+
+    # Equipment Foreman: 1 foreman per 150 operator PER SHIFT.
+    # nOperator hasil rumus di atas adalah kebutuhan TOTAL (sudah termasuk
+    # faktor rasio), jadi jumlah per shift = total / Shift. Dipakai nilai
+    # MENTAH operator, bukan yang sudah dibulatkan, supaya pembulatan tidak
+    # ikut terkali dua kali.
+    equip_fmn = None
+    if operator_raw is not None and fr_fmn:
+        equip_fmn = (operator_raw / OPERATION_SHIFT) / 150.0 * OPERATION_SHIFT * fr_fmn
+
+    parts = [x for x in (mine_fmn, disposal_fmn, pit_fmn, equip_fmn) if x is not None]
+    foreman_raw = sum(parts) if parts else None
+
+    # --- Supervisor & Superintendent ---
+    supervisor_raw = (
+        foreman_raw / SUPERVISOR_PER_FOREMAN_OPS if foreman_raw is not None else None
+    )
+    superintendent = backend.superintendent_ops.get(site)
+
+    return {
+        "operator": _ceil(operator_raw),
+        "mine_foreman": mine_fmn,
+        "disposal_foreman": disposal_fmn,
+        "pit_service_foreman": pit_fmn,
+        "equipment_foreman": _ceil(equip_fmn),
+        "foreman": _ceil(foreman_raw),
+        "supervisor": _ceil(supervisor_raw),
+        "superintendent": _ceil(superintendent),
+        # dipakai UI untuk menjelaskan kenapa sebuah angka kosong
+        "missing": [
+            name for name, val in (
+                ("Faktor Rasio Operator", fr_opt),
+                ("Faktor Rasio Foreman", fr_fmn),
+                ("Jumlah Mine Foreman Operation", mine_fmn),
+                ("Jumlah Disposal Foreman Operation", disposal_fmn),
+                ("Jumlah PIT Service Foreman Operation", pit_fmn),
+                ("Jumlah Superintendent Operation", superintendent),
+            ) if val is None
+        ],
     }
 
 
