@@ -166,8 +166,23 @@ MAINTENANCE_TRAINING_POSITION = "Maintenance Training"
 # memakainya (faktor shift sudah terkandung di Faktor Rasio Operator).
 OPERATION_SHIFT = 2
 
+# Kategori unit yang TIDAK memerlukan operator, jadi dikecualikan dari
+# perhitungan jumlah operator. Di sheet FTE Operation kolom Operator untuk
+# kategori ini memang dikosongkan (Pump dioperasikan dari jarak jauh /
+# tidak berawak). Ditulis huruf kecil; pencocokan case-insensitive.
+NO_OPERATOR_CATEGORIES = {"pump"}
+
 # Rasio Supervisor : Foreman di fungsi Operation (panduan poin 1 = 1:4).
 SUPERVISOR_PER_FOREMAN_OPS = 4
+
+# Kategori alat yang TIDAK memerlukan operator, jadi dikeluarkan dari
+# perhitungan jumlah operator. Alat-alat ini statis/ditinggal menyala
+# (genset, lighting tower, pompa) — tidak ada orang yang mengoperasikannya
+# sepanjang shift.
+#
+# Dicocokkan longgar (huruf/angka saja, tanpa spasi), jadi "Light Tower",
+# "light tower", dan "LightTower" sama-sama kena.
+OPERATOR_EXCLUDED_CATEGORIES = ["Genset", "Light Tower", "Pump"]
 
 ROLES = ["Mechanic", "Electric", "Welder"]
 MONTH_COLS = ["M1", "M2", "M3"]
