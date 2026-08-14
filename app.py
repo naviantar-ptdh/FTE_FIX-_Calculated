@@ -36,6 +36,7 @@ import streamlit.components.v1 as components
 import charts
 import theme
 from calculator import (
+    compute_operation_manpower,
     CalculationError,
     FTEInput,
     compute_fte,
@@ -236,7 +237,26 @@ def aggregate_all_sites(backend, units_all) -> dict | None:
     order += [c for c in mech_by_cat if c not in order]
     mech_by_cat = {c: mech_by_cat[c] for c in order}
 
+    # Sisi Operation dijumlahkan per site: tiap site punya Faktor Rasio dan
+    # jumlah foreman sendiri, jadi tidak bisa dihitung dari angka gabungan.
+    ops_acc = {"operator": 0.0, "foreman": 0.0, "supervisor": 0.0,
+               "superintendent": 0.0}
+    ops_seen = {k: False for k in ops_acc}
+    ops_missing = []
+    for s_ in ok_sites:
+        o = compute_operation_manpower(s_, units_all.get(s_) or [], backend)
+        for k in ops_acc:
+            if o.get(k) is not None:
+                ops_acc[k] += o[k]
+                ops_seen[k] = True
+        for m in o.get("missing", []):
+            if m not in ops_missing:
+                ops_missing.append(m)
+    ops_out = {k: (ops_acc[k] if ops_seen[k] else None) for k in ops_acc}
+    ops_out["missing"] = ops_missing
+
     out = {
+        "ops": ops_out,
         "summary": {
             "mechanic_by_category": mech_by_cat,
             "welder_total": weld,
@@ -571,7 +591,7 @@ def headcount_matrix(summary: dict, staff: dict) -> tuple[list[str], list[dict]]
 # ---------------------------------------------------------------------------
 # 1 — Non-Staff
 # ---------------------------------------------------------------------------
-def render_summary_section(summary: dict, staff: dict):
+def render_summary_section(summary: dict, staff: dict, ops: dict | None = None):
     """Section 1 — ringkasan headcount, dibaca lebih dulu sebelum rinciannya.
 
     Sebelumnya tabel Total Headcount berada di paling bawah (di dalam blok
@@ -632,6 +652,79 @@ def render_summary_section(summary: dict, staff: dict):
         st.markdown(
             theme.table_html(["Level"] + cols + ["Total"], body,
                              total_row=total_row, total_col=len(cols) + 1),
+            unsafe_allow_html=True,
+        )
+
+    if ops is not None:
+        render_control_ratio(summary, staff, ops)
+
+
+def _ratio_text(plm, oper) -> str:
+    """Rasio PLM : Operation, dinormalkan ke '1 : n'.
+
+    Sisi yang lebih kecil dijadikan 1 supaya rasionya langsung terbaca
+    ("1 : 3" jauh lebih cepat dicerna daripada "202 : 606").
+    """
+    if not plm or not oper:
+        return "–"
+    if plm <= oper:
+        return f"1 : {num(oper / plm, 1)}"
+    return f"{num(plm / oper, 1)} : 1"
+
+
+def render_control_ratio(summary: dict, staff: dict, ops: dict):
+    """Perbandingan manpower Plant & Maintenance vs Operation, per level.
+
+    Sisi PLM sengaja hanya mengambil yang OPERATIONAL (bukan Planning), karena
+    yang dibandingkan adalah orang yang mengawasi pekerjaan di lapangan.
+    """
+    _m, _w, _e, _lv, plm_non_staff = section_totals(summary)
+    g = staff_group_counts(staff)
+    plm = {
+        "Non-Staff": plm_non_staff,
+        "Foreman": g["Operational"]["Foreman"],
+        "Supervisor": g["Operational"]["Supervisor"],
+        "Superintendent": g["Operational"]["Superintendent"],
+    }
+    op = {
+        "Non-Staff": ops.get("operator"),
+        "Foreman": ops.get("foreman"),
+        "Supervisor": ops.get("supervisor"),
+        "Superintendent": ops.get("superintendent"),
+    }
+
+    st.write("")
+    with theme.card("ctrl_ratio", "Control Manpower Ratio",
+                    "Plant & Maintenance vs Operation",
+                    accent=theme.BRAND["orange_deep"]):
+        rows = []
+        for lvl in ("Non-Staff", "Foreman", "Supervisor", "Superintendent"):
+            p, o = plm[lvl], op[lvl]
+            rows.append([
+                lvl,
+                num(p) if p is not None else "–",
+                num(o) if o is not None else "–",
+                _ratio_text(p, o),
+            ])
+        st.markdown(
+            theme.table_html(["Level", "Plant & Maintenance", "Operation", "Ratio"],
+                             rows, total_col=3),
+            unsafe_allow_html=True,
+        )
+        missing = ops.get("missing") or []
+        if missing:
+            st.markdown(
+                theme.assumption_note(
+                    "Belum terisi di BACKEND — angka Operation belum lengkap",
+                    [(m, "–") for m in missing],
+                ),
+                unsafe_allow_html=True,
+            )
+        st.markdown(
+            '<div class="dh-note">Operator = Σ(Jumlah Unit × PA) × Faktor Rasio '
+            'Operator. Equipment Foreman dihitung dari jumlah operator; Mine, '
+            'Disposal dan PIT Service Foreman diambil dari BACKEND. Supervisor '
+            'Operation = Total Foreman ÷ 4. Semua angka dibulatkan ke atas.</div>',
             unsafe_allow_html=True,
         )
 
@@ -1039,8 +1132,9 @@ def render_cost(summary: dict, cost: dict, staff: dict):
             )
 
 
-def render_dashboard_body(summary: dict, cost: dict, staff: dict) -> dict:
-    render_summary_section(summary, staff)
+def render_dashboard_body(summary: dict, cost: dict, staff: dict,
+                          ops: dict | None = None) -> dict:
+    render_summary_section(summary, staff, ops)
     render_non_staff(summary)
     render_staff(staff)
     render_cost(summary, cost, staff)
@@ -1476,7 +1570,9 @@ def render_basecase_mode(backend):
         formula_items(backend, unit_qty, site=site),
         summary["detail_rows"], with_site=False, skipped=summary["skipped_units"],
     )
-    render_dashboard_body(summary, cost, staff_res)
+    ops = compute_operation_manpower(
+        site, df_to_units(st.session_state.working_units_df), backend)
+    render_dashboard_body(summary, cost, staff_res, ops)
 
 
 
@@ -1531,7 +1627,7 @@ def render_summary_mode(backend):
         "planner": agg["planner"],
         "superintendent_operational": agg["superintendent_operational"],
         "superintendent_planner": agg["superintendent_planner"],
-    })
+    }, agg.get("ops"))
 
 
 # ===========================================================================
