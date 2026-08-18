@@ -1416,13 +1416,24 @@ def control_ratio_table(rows: list[dict]) -> str:
                 f'{_fmt_id(v)}</td>')
 
     def dev_cell(v, color):
-        """Deviasi: nilai negatif diberi tanda minus eksplisit dan warna
-        status, karena kekurangan orang perlu langsung kelihatan."""
+        """Deviasi: aktual dikurangi standar.
+
+        Tandanya dibaca lewat panah, bukan +/- : panah ATAS berarti jumlah
+        orang yang ada MELEBIHI standar, panah BAWAH berarti kurang dari
+        standar. Angkanya ditulis tanpa tanda karena arah sudah dibawa panah.
+        """
         if v is None:
             return f'<td style="color:{NEUTRAL["text_soft"]}">–</td>'
-        col = STATUS["bad"] if v < 0 else (STATUS["good"] if v > 0 else color)
-        return (f'<td style="color:{col};font-weight:700">'
-                f'{_fmt_id(v, signed=True)}</td>')
+        if v > 0:
+            arrow, col = "&#9650;", STATUS["bad"]      # kelebihan orang
+        elif v < 0:
+            arrow, col = "&#9660;", STATUS["warn"]     # kekurangan orang
+        else:
+            arrow, col = "", color
+        panah = (f'<span style="font-size:9px;vertical-align:1px">{arrow}</span> '
+                 if arrow else "")
+        return (f'<td style="color:{col};font-weight:700;white-space:nowrap">'
+                f'{panah}{_fmt_id(abs(v))}</td>')
 
     body = []
     for r in rows:
@@ -1473,14 +1484,13 @@ def control_ratio_table(rows: list[dict]) -> str:
     """
 
 
-def _fmt_id(v, dec: int = 0, signed: bool = False) -> str:
-    """Angka format Indonesia (ribuan titik, desimal koma)."""
-    s = f"{abs(v):,.{dec}f}".replace(",", "_").replace(".", ",").replace("_", ".")
-    if signed and v < 0:
-        return f"−{s}"
-    if signed and v > 0:
-        return f"+{s}"
-    return s
+def _fmt_id(v, dec: int = 0) -> str:
+    """Angka format Indonesia (ribuan titik, desimal koma), selalu positif.
+
+    Arah selisih dibawa oleh panah di dev_cell, bukan oleh tanda +/-, jadi
+    fungsi ini sengaja tidak lagi menerima nilai bertanda.
+    """
+    return f"{abs(v):,.{dec}f}".replace(",", "_").replace(".", ",").replace("_", ".")
 
 
 def table_html(headers: list[str], rows: list[list], total_row: list | None = None,
