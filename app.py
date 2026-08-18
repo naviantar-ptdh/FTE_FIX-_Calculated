@@ -731,14 +731,14 @@ def render_control_ratio(summary: dict, staff: dict, ops: dict,
             "plm": {
                 "fte": fte,
                 "aktual": a_plm,
-                # Deviasi = hasil hitung - aktual. Negatif berarti orang yang
-                # ada SEKARANG lebih banyak dari kebutuhan standar.
-                "deviasi": (fte - a_plm) if (fte is not None and a_plm is not None) else None,
+                # Deviasi = aktual - standar. Positif berarti orang yang ADA
+                # sekarang melebihi kebutuhan standar; negatif berarti kurang.
+                "deviasi": (a_plm - fte) if (fte is not None and a_plm is not None) else None,
             },
             "ops": {
                 "standard": std,
                 "aktual": a_ops,
-                "deviasi": (std - a_ops) if (std is not None and a_ops is not None) else None,
+                "deviasi": (a_ops - std) if (std is not None and a_ops is not None) else None,
             },
             "ratio": (fte, std),
         })
