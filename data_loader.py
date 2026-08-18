@@ -87,6 +87,10 @@ class BackendData:
     disposal_foreman_ops: Dict[str, float] = field(default_factory=dict)  # Jumlah Disposal Foreman
     pit_service_foreman_ops: Dict[str, float] = field(default_factory=dict)  # Jumlah PIT Service Foreman
     superintendent_ops: Dict[str, float] = field(default_factory=dict) # Jumlah Superintendent Operation
+    # Headcount AKTUAL (bukan hasil hitung), untuk kolom Aktual & Deviasi di
+    # tabel Control Manpower Ratio.
+    #   {level: {site: {"plm": x, "operation": y}}}
+    actual_manpower: Dict[str, Dict[str, Dict[str, float]]] = field(default_factory=dict)
 
     DEFAULT_COMPETENCY_FACTOR = 0.8
 
@@ -581,6 +585,44 @@ def parse_backend(raw: pd.DataFrame) -> BackendData:
     superintendent_ops = _read_site_values(
         "jumlah superintendent operation", "superintendent operation")
 
+    # --- Aktual PLM & Operation (matriks level x site) -----------------------
+    # Header: Level | PLM BCP | Operation BCP | PLM ACP | ... Kolom dibaca
+    # BERDASARKAN NAMA, jadi urutan site boleh berubah dan boleh ada site baru
+    # tanpa menyentuh kode.
+    actual_manpower: Dict[str, Dict[str, Dict[str, float]]] = {}
+    act_idx = _find_title_row(df, "aktual plm & operation")
+    if act_idx is None:
+        act_idx = _find_title_row(df, "aktual plm dan operation")
+    if act_idx is not None:
+        h = act_idx + 1
+        while h < len(df) and _is_blank_row(df, h):
+            h += 1
+        # peta kolom -> (jenis, site)
+        colmap: Dict[int, tuple] = {}
+        for c in range(1, df.shape[1]):
+            head = _col_text(df, h, c).strip()
+            if not head:
+                continue
+            low = head.lower()
+            if low.startswith("plm "):
+                colmap[c] = ("plm", head[4:].strip())
+            elif low.startswith("operation "):
+                colmap[c] = ("operation", head[10:].strip())
+        r2 = h + 1
+        while r2 < len(df) and not _is_blank_row(df, r2):
+            level = _col_text(df, r2, 0).strip()
+            if not level:
+                break
+            for c, (kind, site) in colmap.items():
+                v = _safe_float(_cell(df, r2, c))
+                if v == v:              # bukan NaN
+                    actual_manpower.setdefault(level, {}).setdefault(
+                        site, {})[kind] = v
+            r2 += 1
+    else:
+        logger.info("Seksi 'Aktual PLM & Operation' tidak ada — kolom Aktual "
+                    "dan Deviasi akan tampil '-'.")
+
     sites = list(ratio_shift.keys()) or list(lost_time.keys())
 
     bd = BackendData(
@@ -605,6 +647,7 @@ def parse_backend(raw: pd.DataFrame) -> BackendData:
         disposal_foreman_ops=disposal_foreman_ops,
         pit_service_foreman_ops=pit_service_foreman_ops,
         superintendent_ops=superintendent_ops,
+        actual_manpower=actual_manpower,
     )
     return bd
 
