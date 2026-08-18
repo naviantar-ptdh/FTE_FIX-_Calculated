@@ -591,7 +591,8 @@ def headcount_matrix(summary: dict, staff: dict) -> tuple[list[str], list[dict]]
 # ---------------------------------------------------------------------------
 # 1 — Non-Staff
 # ---------------------------------------------------------------------------
-def render_summary_section(summary: dict, staff: dict, ops: dict | None = None):
+def render_summary_section(summary: dict, staff: dict, ops: dict | None = None,
+                           actual: dict | None = None):
     """Section 1 — ringkasan headcount, dibaca lebih dulu sebelum rinciannya.
 
     Sebelumnya tabel Total Headcount berada di paling bawah (di dalam blok
@@ -656,7 +657,27 @@ def render_summary_section(summary: dict, staff: dict, ops: dict | None = None):
         )
 
     if ops is not None:
-        render_control_ratio(summary, staff, ops)
+        render_control_ratio(summary, staff, ops, actual)
+
+
+def actual_for(backend, sites) -> dict:
+    """Headcount aktual per level, dijumlahkan atas `sites`.
+
+    Basecase mengirim satu site, Summary mengirim seluruh site. Level yang
+    tidak punya data sama sekali dikembalikan kosong supaya tabel menampilkan
+    "-" alih-alih nol yang menyesatkan.
+    """
+    out = {}
+    for level, per_site in (backend.actual_manpower or {}).items():
+        acc, seen = {"plm": 0.0, "operation": 0.0}, {"plm": False, "operation": False}
+        for s_ in sites:
+            vals = per_site.get(s_) or {}
+            for kind in ("plm", "operation"):
+                if vals.get(kind) is not None:
+                    acc[kind] += vals[kind]
+                    seen[kind] = True
+        out[level] = {k: (acc[k] if seen[k] else None) for k in acc}
+    return out
 
 
 def _ratio_text(plm, oper) -> str:
@@ -672,45 +693,61 @@ def _ratio_text(plm, oper) -> str:
     return f"{num(plm / oper, 1)} : 1"
 
 
-def render_control_ratio(summary: dict, staff: dict, ops: dict):
+def render_control_ratio(summary: dict, staff: dict, ops: dict,
+                         actual: dict | None = None):
     """Perbandingan manpower Plant & Maintenance vs Operation, per level.
+
+    Tiap departemen punya tiga kolom: hasil hitung (FTE untuk PLM, Standard
+    untuk Operation), headcount Aktual dari BACKEND, dan Deviasi di antara
+    keduanya. Rasio dihitung dari hasil hitung — FTE vs Standard — bukan dari
+    aktual, supaya yang dibandingkan sama-sama angka standar.
 
     Sisi PLM sengaja hanya mengambil yang OPERATIONAL (bukan Planning), karena
     yang dibandingkan adalah orang yang mengawasi pekerjaan di lapangan.
     """
     _m, _w, _e, _lv, plm_non_staff = section_totals(summary)
     g = staff_group_counts(staff)
-    plm = {
+    plm_calc = {
         "Non-Staff": plm_non_staff,
         "Foreman": g["Operational"]["Foreman"],
         "Supervisor": g["Operational"]["Supervisor"],
         "Superintendent": g["Operational"]["Superintendent"],
     }
-    op = {
+    ops_calc = {
         "Non-Staff": ops.get("operator"),
         "Foreman": ops.get("foreman"),
         "Supervisor": ops.get("supervisor"),
         "Superintendent": ops.get("superintendent"),
     }
+    actual = actual or {}
+
+    rows = []
+    for lvl in ("Non-Staff", "Foreman", "Supervisor", "Superintendent"):
+        fte, std = plm_calc.get(lvl), ops_calc.get(lvl)
+        act = actual.get(lvl, {})
+        a_plm, a_ops = act.get("plm"), act.get("operation")
+        rows.append({
+            "level": lvl,
+            "plm": {
+                "fte": fte,
+                "aktual": a_plm,
+                # Deviasi = hasil hitung - aktual. Negatif berarti orang yang
+                # ada SEKARANG lebih banyak dari kebutuhan standar.
+                "deviasi": (fte - a_plm) if (fte is not None and a_plm is not None) else None,
+            },
+            "ops": {
+                "standard": std,
+                "aktual": a_ops,
+                "deviasi": (std - a_ops) if (std is not None and a_ops is not None) else None,
+            },
+            "ratio": (fte, std),
+        })
 
     st.write("")
     with theme.card("ctrl_ratio", "Control Manpower Ratio",
                     "Plant & Maintenance vs Operation",
                     accent=theme.BRAND["orange_deep"]):
-        rows = []
-        for lvl in ("Non-Staff", "Foreman", "Supervisor", "Superintendent"):
-            p, o = plm[lvl], op[lvl]
-            rows.append([
-                lvl,
-                num(p) if p is not None else "–",
-                num(o) if o is not None else "–",
-                _ratio_text(p, o),
-            ])
-        st.markdown(
-            theme.table_html(["Level", "Plant & Maintenance", "Operation", "Ratio"],
-                             rows, total_col=3),
-            unsafe_allow_html=True,
-        )
+        st.markdown(theme.control_ratio_table(rows), unsafe_allow_html=True)
         missing = ops.get("missing") or []
         if missing:
             st.markdown(
@@ -721,8 +758,9 @@ def render_control_ratio(summary: dict, staff: dict, ops: dict):
                 unsafe_allow_html=True,
             )
         st.markdown(
-            '<div class="dh-note">Plant & Maintenance Department: Calculated based on the PLM Operational standard. '
-            'Operations Department: Calculated based on the applicable standards.</div>',
+            '<div class="dh-note">Plant &amp; Maintenance Department: Calculated '
+            'based on the PLM Operational standard. Operations Department: '
+            'Calculated based on the applicable standards.</div>',
             unsafe_allow_html=True,
         )
 
@@ -1131,8 +1169,9 @@ def render_cost(summary: dict, cost: dict, staff: dict):
 
 
 def render_dashboard_body(summary: dict, cost: dict, staff: dict,
-                          ops: dict | None = None) -> dict:
-    render_summary_section(summary, staff, ops)
+                          ops: dict | None = None,
+                          actual: dict | None = None) -> dict:
+    render_summary_section(summary, staff, ops, actual)
     render_non_staff(summary)
     render_staff(staff)
     render_cost(summary, cost, staff)
@@ -1570,7 +1609,8 @@ def render_basecase_mode(backend):
     )
     ops = compute_operation_manpower(
         site, df_to_units(st.session_state.working_units_df), backend)
-    render_dashboard_body(summary, cost, staff_res, ops)
+    render_dashboard_body(summary, cost, staff_res, ops,
+                          actual_for(backend, [site]))
 
 
 
@@ -1625,7 +1665,7 @@ def render_summary_mode(backend):
         "planner": agg["planner"],
         "superintendent_operational": agg["superintendent_operational"],
         "superintendent_planner": agg["superintendent_planner"],
-    }, agg.get("ops"))
+    }, agg.get("ops"), actual_for(backend, backend.sites or []))
 
 
 # ===========================================================================
@@ -1653,7 +1693,6 @@ DIRECTORATES = {
                  "mechanic working hour.",
         "url": "https://script.google.com/macros/s/AKfycbxTMCA17k_yqY-WjZWXera6D_LYfk3M5lwwxRU08O-WLZeT5iASFe6_Vsbg6vIvDMPB2w/exec",
     },
-# https://script.google.com/macros/s/AKfycbzBvyiQuA6QBkQZha2gcPGv5-9RzonD7XUjQzHyfQfaXQUGSiQiaYI3TtiChPI4PTNj/exec (Link terbaru untuk Plant)
     "plant": {
         "icon": "optimizing.png",
         "title": "Plant & Maintenance",
