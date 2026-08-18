@@ -603,6 +603,48 @@ def inject_css():
         /* =====================================================
            TABEL
            ===================================================== */
+        /* ---- Tabel Control Manpower Ratio (header bergrup) -------------- */
+        .dh-ctrl {{
+            width: 100%; border-collapse: collapse; font-size: 12px;
+            font-variant-numeric: tabular-nums;
+        }}
+        .dh-ctrl th {{
+            color: #fff; padding: 7px 10px; text-align: right;
+            font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase;
+            font-weight: 800; border-right: 1px solid rgba(255,255,255,.14);
+        }}
+        .dh-ctrl tr.grp th {{ text-align: center; font-size: 10.5px; }}
+        .dh-ctrl th.lvl {{
+            text-align: left; background: {NEUTRAL['wash']};
+            color: {NEUTRAL['text']}; border-radius: 6px 0 0 0;
+            vertical-align: middle;
+        }}
+        .dh-ctrl th.ratio {{
+            background: {tint(BRAND['orange'], .90)}; color: {BRAND['orange_deep']};
+            text-align: center; vertical-align: middle; line-height: 1.35;
+            border-radius: 0 6px 0 0; border-right: none;
+        }}
+        .dh-ctrl th.ratio span {{
+            font-size: 8px; font-weight: 600; text-transform: none;
+            letter-spacing: 0; opacity: .8;
+        }}
+        .dh-ctrl td {{
+            text-align: right; padding: 8px 10px;
+            border-bottom: 1px solid {NEUTRAL['border_soft']};
+        }}
+        .dh-ctrl td.lvl {{
+            text-align: left; font-weight: 700; color: {NEUTRAL['text']};
+            background: {NEUTRAL['wash']};
+        }}
+        .dh-ctrl td.ratio {{
+            text-align: center; font-size: 13px;
+            background: {tint(BRAND['orange'], .955)};
+        }}
+        .dh-ctrl tbody tr:nth-child(even) td:not(.lvl):not(.ratio) {{
+            background: {NEUTRAL['wash']};
+        }}
+        .dh-ctrl tbody tr:last-child td {{ border-bottom: none; }}
+
         .dh-table {{ width: 100%; border-collapse: collapse; font-size: 12px; }}
         .dh-table th {{
             text-align: right; font-weight: 700; font-size: 9.5px; letter-spacing: .07em;
@@ -1344,6 +1386,101 @@ def card(key: str, title: str = "", sub: str = "", accent: str | None = None):
                 unsafe_allow_html=True,
             )
         yield container
+
+
+def control_ratio_table(rows: list[dict]) -> str:
+    """Tabel Control Manpower Ratio: dua grup kolom + kolom rasio.
+
+        Level | Plant & Maintenance      | Operation                  | Ratio
+              | FTE  Aktual  Deviasi     | Standard  Aktual  Deviasi  |
+
+    Tiap `row` berupa dict:
+        {"level": str,
+         "plm": {"fte": v, "aktual": v, "deviasi": v},
+         "ops": {"standard": v, "aktual": v, "deviasi": v},
+         "ratio": (kiri, kanan)}      # angka rasio, boleh None
+
+    Warna dipakai untuk MEMBEDAKAN DEPARTEMEN, bukan sebagai hiasan: angka
+    Plant & Maintenance selalu navy, angka Operation selalu hitam, dan kolom
+    Ratio memakai kedua warna itu pada sisinya masing-masing sehingga
+    "1 : 2" langsung terbaca mana yang PLM dan mana yang Operation.
+    """
+    navy = BRAND["navy"]
+    black = "#1A1A1A"
+
+    def cell(v, color, bold=False):
+        if v is None:
+            return f'<td style="color:{NEUTRAL["text_soft"]}">–</td>'
+        w = "800" if bold else "600"
+        return (f'<td style="color:{color};font-weight:{w}">'
+                f'{_fmt_id(v)}</td>')
+
+    def dev_cell(v, color):
+        """Deviasi: nilai negatif diberi tanda minus eksplisit dan warna
+        status, karena kekurangan orang perlu langsung kelihatan."""
+        if v is None:
+            return f'<td style="color:{NEUTRAL["text_soft"]}">–</td>'
+        col = STATUS["bad"] if v < 0 else (STATUS["good"] if v > 0 else color)
+        return (f'<td style="color:{col};font-weight:700">'
+                f'{_fmt_id(v, signed=True)}</td>')
+
+    body = []
+    for r in rows:
+        p, o = r.get("plm", {}), r.get("ops", {})
+        kiri, kanan = r.get("ratio", (None, None))
+        if kiri and kanan:
+            ratio_html = (
+                f'<span style="color:{navy};font-weight:800">1</span>'
+                f'<span style="color:{NEUTRAL["text_soft"]};font-weight:700"> : </span>'
+                f'<span style="color:{black};font-weight:800">'
+                f'{_fmt_id(kanan / kiri, dec=1)}</span>'
+            )
+        else:
+            ratio_html = f'<span style="color:{NEUTRAL["text_soft"]}">–</span>'
+        body.append(
+            "<tr>"
+            f'<td class="lvl">{r["level"]}</td>'
+            + cell(p.get("fte"), navy, bold=True)
+            + cell(p.get("aktual"), navy)
+            + dev_cell(p.get("deviasi"), navy)
+            + cell(o.get("standard"), black, bold=True)
+            + cell(o.get("aktual"), black)
+            + dev_cell(o.get("deviasi"), black)
+            + f'<td class="ratio">{ratio_html}</td>'
+            + "</tr>"
+        )
+
+    return f"""
+    <table class="dh-ctrl">
+      <thead>
+        <tr class="grp">
+          <th rowspan="2" class="lvl">Level</th>
+          <th colspan="3" style="background:{navy}">Plant &amp; Maintenance</th>
+          <th colspan="3" style="background:{black}">Operation</th>
+          <th rowspan="2" class="ratio">Ratio<br/><span>PLM (FTE) vs Operation (Standard)</span></th>
+        </tr>
+        <tr class="sub">
+          <th style="background:{navy}">FTE</th>
+          <th style="background:{navy}">Aktual</th>
+          <th style="background:{navy}">Deviasi</th>
+          <th style="background:{black}">Standard</th>
+          <th style="background:{black}">Aktual</th>
+          <th style="background:{black}">Deviasi</th>
+        </tr>
+      </thead>
+      <tbody>{''.join(body)}</tbody>
+    </table>
+    """
+
+
+def _fmt_id(v, dec: int = 0, signed: bool = False) -> str:
+    """Angka format Indonesia (ribuan titik, desimal koma)."""
+    s = f"{abs(v):,.{dec}f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    if signed and v < 0:
+        return f"−{s}"
+    if signed and v > 0:
+        return f"+{s}"
+    return s
 
 
 def table_html(headers: list[str], rows: list[list], total_row: list | None = None,
