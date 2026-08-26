@@ -46,6 +46,7 @@ from calculator import (
 )
 from charts import num, rp, rp_short
 from config import (
+    ACCESS_ROLES,
     BASE_MECHANIC_HOURS,
     CACHE_TTL_SECONDS,
     COST_RATE,
@@ -1783,8 +1784,11 @@ def render_landing():
                 st.rerun()
     st.write("")
 
-    cols = st.columns(3, gap="medium")
-    for col, key in zip(cols, ("engineer", "hcm", "plant")):
+    # Hanya form yang boleh dibuka peran ini yang ditampilkan. Jumlah kolom
+    # ikut menyesuaikan supaya satu kartu tidak melar selebar layar.
+    allowed = [k for k in ("engineer", "hcm", "plant") if can_open_form(k)]
+    cols = st.columns(max(len(allowed), 1), gap="medium")
+    for col, key in zip(cols, allowed):
         d = DIRECTORATES[key]
         with col:
             # Kartu + ikon info dibungkus satu container: container inilah yang
@@ -1864,14 +1868,88 @@ def _sidebar_brand():
     )
 
 
+def current_role() -> dict | None:
+    """Peran yang sedang login, atau None kalau belum."""
+    return st.session_state.get("role")
+
+
+def can_open_form(key: str) -> bool:
+    r = current_role()
+    return bool(r) and key in r["forms"]
+
+
+def render_login():
+    """Gerbang masuk. Ditampilkan sebelum apa pun yang lain.
+
+    Password dibandingkan apa adanya (lihat catatan keamanan di config.py):
+    ini memisahkan peran antar rekan kerja, bukan pengaman terhadap orang luar.
+    """
+    st.markdown(
+        theme.hero(theme.image_uri("logo_putih (2).png"),
+                   "PT Darma Henwa · Workforce Planning",
+                   "Manpower Planning Workspace"),
+        unsafe_allow_html=True,
+    )
+    st.write("")
+
+    _l, mid, _r = st.columns([1, 1.1, 1])
+    with mid:
+        with theme.card("login", "Sign in", "masukkan password sesuai fungsi"):
+            pw = st.text_input("Password", type="password", key="login_pw",
+                               placeholder="••••••••")
+            with st.container(key="login_go"):
+                masuk = st.button("Masuk", width="stretch", key="btn_login",
+                                  type="primary")
+            if masuk:
+                role = ACCESS_ROLES.get(pw.strip())
+                if role:
+                    st.session_state.role = role
+                    st.session_state.page = "landing"
+                    st.rerun()
+                else:
+                    st.error("Password tidak dikenali.")
+            st.markdown(
+                '<div class="dh-note">Tiap fungsi punya password sendiri. '
+                'Hubungi OD &amp; HCM Strategy kalau belum punya.</div>',
+                unsafe_allow_html=True,
+            )
+
+
+def render_sidebar_role():
+    """Identitas peran + tombol keluar, dipakai di semua halaman ber-sidebar."""
+    r = current_role()
+    if not r:
+        return
+    st.markdown(
+        theme.side_readout("Signed in as", r["label"], r["desc"]),
+        unsafe_allow_html=True,
+    )
+    with st.container(key="side_logout"):
+        if st.button("Keluar", width="stretch", key="btn_logout"):
+            for k in ("role", "page"):
+                st.session_state.pop(k, None)
+            st.rerun()
+
+
 def main():
     st.session_state.setdefault("page", "landing")
+
+    # Gerbang akses: tanpa peran, tidak ada halaman lain yang dirender.
+    if current_role() is None:
+        render_login()
+        return
+
     page = st.session_state.page
 
     if page == "landing":
         render_landing()
         return
     if page in ("engineer", "hcm", "plant"):
+        # Penjaga rute. Menyembunyikan kartu di landing saja tidak cukup —
+        # nilai `page` bisa tertinggal di session dari peran sebelumnya.
+        if not can_open_form(page):
+            st.session_state.page = "landing"
+            st.rerun()
         render_embed_page(page)
         return
 
@@ -1889,6 +1967,7 @@ def main():
     if page == "calculator":
         with st.sidebar:
             _sidebar_brand()
+            render_sidebar_role()
             with st.container(key="side_home_calc"):
                 if st.button("← Home", width="stretch", key="btn_home_calc"):
                     st.session_state.page = "landing"
@@ -1914,6 +1993,7 @@ def main():
 
     with st.sidebar:
         _sidebar_brand()
+        render_sidebar_role()
         with st.container(key="side_home"):
             if st.button("← Home", width="stretch", key="btn_home"):
                 st.session_state.page = "landing"

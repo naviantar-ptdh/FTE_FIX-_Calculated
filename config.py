@@ -197,3 +197,43 @@ MONTH_COLS = ["M1", "M2", "M3"]
 # Nilai ini dibaca app.py; jangan menulis angka ttl langsung di dekorator
 # @st.cache_data, nanti konstanta ini jadi tidak berpengaruh.
 CACHE_TTL_SECONDS = 60
+
+
+# ---------------------------------------------------------------------------
+# Kontrol akses
+# ---------------------------------------------------------------------------
+# Tiga peran, dibedakan oleh FORM apa yang boleh dibuka. Ketiganya sama-sama
+# boleh memakai kalkulator dan menjalankan perhitungan.
+#
+# CATATAN KEAMANAN — mohon dibaca sebelum dipakai luas:
+# Password di sini tersimpan sebagai teks biasa di dalam repo. Siapa pun yang
+# bisa membuka repo (atau meng-inspect source aplikasi) bisa membacanya. Ini
+# cukup untuk memisahkan peran antar rekan kerja supaya tidak saling mengubah
+# form orang lain, TAPI bukan pengaman terhadap orang luar.
+#
+# Kalau nanti perlu pengamanan sungguhan, pindahkan ke Streamlit Secrets:
+# buat file .streamlit/secrets.toml (jangan di-commit) berisi
+#     [passwords]
+#     hcm = "..."
+# lalu ganti pembacaan di bawah dengan st.secrets["passwords"]["hcm"].
+ACCESS_ROLES = {
+    "HCMPTDH": {
+        "id": "hcm",
+        "label": "HCM",
+        "desc": "Full access",
+        # Form yang boleh dibuka. Kalkulator selalu boleh untuk semua peran.
+        "forms": ("engineer", "hcm", "plant"),
+    },
+    "PLMPTDH": {
+        "id": "plm",
+        "label": "Plant & Maintenance",
+        "desc": "Form Plant & Maintenance + Calculator",
+        "forms": ("plant",),
+    },
+    "ENGINEERINGPTDH": {
+        "id": "engineering",
+        "label": "Engineering",
+        "desc": "Form Engineering + Calculator",
+        "forms": ("engineer",),
+    },
+}

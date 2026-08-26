@@ -1014,6 +1014,24 @@ def inject_css():
            label: permukaannya diberi isi tipis + kilau di tepi atas, lalu
            "bibir" keras di bawahnya (box-shadow tanpa blur) yang memendek
            saat ditekan — itu yang memberi kesan tombol benar-benar turun. */
+        /* tombol Masuk di layar login */
+        div[class*="st-key-login_go"] button {{
+            background: linear-gradient(135deg, {BRAND['orange_deep']}, {BRAND['orange']}) !important;
+            color: #fff !important; border: none !important;
+            font-weight: 800 !important; border-radius: 10px !important;
+            height: 44px; box-shadow: 0 4px 12px -4px rgba(217,78,0,.6);
+        }}
+        div[class*="st-key-side_logout"] button {{
+            background: transparent !important;
+            color: {NEUTRAL['text_muted']} !important;
+            border: 1px solid {NEUTRAL['border']} !important;
+            border-radius: 9px !important; font-weight: 600 !important;
+            height: 36px; margin-bottom: 6px;
+        }}
+        div[class*="st-key-side_logout"] button:hover {{
+            border-color: {STATUS['bad']} !important; color: {STATUS['bad']} !important;
+        }}
+
         div[class*="st-key-hero_calc"] {{
             position: absolute; top: 50%; right: 26px;
             transform: translateY(-50%); width: 200px; z-index: 8;
