@@ -39,12 +39,27 @@ UNIT_EDIT_PASSWORD = "DHRising"
 #
 # Ini tidak membuat aplikasi jadi sering menembak Google: URL hanya dibangun
 # saat cache Streamlit meleset (lihat CACHE_TTL_SECONDS), bukan tiap rerun.
-def gsheet_csv_url(sheet_name: str, spreadsheet_id: str = SPREADSHEET_ID) -> str:
+def gsheet_csv_url(sheet_name: str, spreadsheet_id: str = SPREADSHEET_ID,
+                   two_row_header: bool = False) -> str:
+    """URL export CSV lewat gviz.
+
+    `two_row_header=True` menambahkan `headers=0`, WAJIB untuk sheet yang dua
+    baris teratasnya sama-sama header (sheet Unit: baris 1 nama site, baris 2
+    "Category | Jenis Unit | ..."). Tanpa itu gviz menggabungkan keduanya jadi
+    satu baris "KCP Category", sehingga parser tidak pernah menemukan baris
+    berisi "Category" dan menyimpulkan sheet-nya salah format.
+
+    JANGAN dinyalakan untuk BACKEND. Di mode headers=0 gviz ikut menebak tipe
+    tiap kolom, dan teks header di kolom yang isinya angka (mis. "Load
+    Mechanic") dibuang jadi kosong — seluruh seksi BACKEND jadi tidak
+    terdeteksi. Sudah pernah terjadi; jangan diulang.
+    """
     from urllib.parse import quote
     import time
+    extra = "&headers=0" if two_row_header else ""
     return (
         f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
-        f"/gviz/tq?tqx=out:csv&sheet={quote(sheet_name)}"
+        f"/gviz/tq?tqx=out:csv&sheet={quote(sheet_name)}{extra}"
         f"&_cb={int(time.time())}"
     )
 
