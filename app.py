@@ -1781,7 +1781,7 @@ def render_plan_actual_mode(backend):
             sub = (f"{num(abs(dev))} {arah} dari plan" if dev
                    else "sama dengan plan")
             st.markdown(
-                theme.kpi_card(label, theme.dual_value(la[key], lp[key]),
+                theme.kpi_card(label, theme.dual_value(lp[key], la[key]),
                                sub, accent=accent, emoji=emo, value_size=26),
                 unsafe_allow_html=True,
             )
@@ -1789,41 +1789,227 @@ def render_plan_actual_mode(backend):
     st.write("")
     rows = [
         {"level": "Non-Staff", "head": True},
-        {"level": "Mechanic", "actual": la["Mechanic"], "plan": lp["Mechanic"],
+        {"level": "Mechanic", "plan": lp["Mechanic"], "actual": la["Mechanic"],
          "indent": True},
         {"level": "Staff", "head": True},
-        {"level": "Foreman", "actual": la["Foreman"], "plan": lp["Foreman"],
+        {"level": "Foreman", "plan": lp["Foreman"], "actual": la["Foreman"],
          "indent": True},
-        {"level": "Supervisor", "actual": la["Supervisor"],
-         "plan": lp["Supervisor"], "indent": True},
-        {"level": "Superintendent", "actual": la["Superintendent"],
-         "plan": lp["Superintendent"], "indent": True},
+        {"level": "Supervisor", "plan": lp["Supervisor"],
+         "actual": la["Supervisor"], "indent": True},
+        {"level": "Superintendent", "plan": lp["Superintendent"],
+         "actual": la["Superintendent"], "indent": True},
     ]
     with theme.card("pa_summary", "Manpower per level",
                     "deviasi = aktual − plan", accent=theme.BRAND["navy"]):
         st.markdown(theme.plan_actual_table(rows), unsafe_allow_html=True)
 
-    # ---------------- Section 2-4: pakai dashboard AKTUAL ----------------
-    # Bagian Non-Staff / Staff / Cost menampilkan sisi AKTUAL, karena itulah
-    # kondisi yang sedang berjalan; angka plan sudah tersaji sebagai pembanding
-    # di section Summary di atas.
+    # ---------------- Section 2 & 3: Plan vs Actual bersisian --------------
+    # Bukan menampilkan sisi aktual saja: tiap section dibelah dua, kiri plan
+    # kanan aktual, dengan jenis grafik yang sama persis di kedua sisi supaya
+    # panjang batangnya bisa dibandingkan langsung tanpa menerjemahkan skala.
+    render_pa_split_section(2, "Non-Staff",
+                            "mechanic, electrician and welder manpower",
+                            plan, actual, kind="nonstaff")
+    render_pa_split_section(3, "Staff",
+                            "foreman, supervisor and superintendent",
+                            plan, actual, kind="staff")
+
+    if actual["cost"] and plan["cost"]:
+        render_pa_cost(plan, actual)
+
     st.write("")
+    with st.expander("Data unit — Plan vs Actual"):
+        t1, t2 = st.tabs(["Plan", "Actual"])
+        with t1:
+            render_unit_list(plan_units, sites)
+        with t2:
+            render_unit_list(actual_units, sites)
+
+
+def _section_series(bundle):
+    """Label section + total MPP-nya, urutan konsisten antar bundle."""
+    summ = bundle["summary"]
+    lbl, val = [], []
+    for cat, lv in summ["mechanic_by_category"].items():
+        lbl.append(cat); val.append(lv.get("Tot", 0))
+    lbl.append("Welder"); val.append(summ["welder_total"].get("Tot", 0))
+    lbl.append("Electrician"); val.append(summ["electric_total"].get("Tot", 0))
+    return lbl, val
+
+
+def _staff_series(bundle):
+    g = staff_group_counts(bundle["staff"])
+    lbl = ["Foreman", "Supervisor", "Superintendent"]
+    val = [g["Operational"][r] + g["Planner"][r] for r in lbl]
+    return lbl, val
+
+
+def render_pa_split_section(no, title, sub, plan, actual, kind):
+    """Satu section dibelah dua: grafik plan di kiri, aktual di kanan."""
+    if kind == "nonstaff":
+        lbl_p, val_p = _section_series(plan)
+        lbl_a, val_a = _section_series(actual)
+    else:
+        lbl_p, val_p = _staff_series(plan)
+        lbl_a, val_a = _staff_series(actual)
+
+    tot_p, tot_a = sum(val_p), sum(val_a)
     st.markdown(
-        '<div class="dh-note">Bagian di bawah menampilkan angka <b>aktual</b>. '
-        'Perbandingan dengan plan ada di section Summary.</div>',
+        theme.section_heading(no, title, sub,
+                              tag=f"{num(tot_p)} → {num(tot_a)} MPP"),
         unsafe_allow_html=True,
     )
-    if actual["cost"]:
-        render_non_staff(actual["summary"])
-        render_staff(actual["staff"])
-        render_cost(actual["summary"], actual["cost"], actual["staff"])
-    else:
+
+    # Skala X disamakan di kedua sisi. Tanpa ini Plotly memberi skala berbeda
+    # pada tiap grafik, dan batang yang lebih pendek bisa terlihat lebih
+    # panjang — persis kesalahan baca yang ingin dihindari.
+    xmax = max(val_p + val_a + [1]) * 1.18
+
+    c1, c2 = st.columns(2, gap="small")
+    with c1:
+        with theme.card(f"pa_{kind}_plan", f"{title} · Plan",
+                        f"{num(tot_p)} MPP", accent=theme.BRAND["navy"]):
+            st.plotly_chart(
+                charts.simple_hbar(lbl_p, val_p, theme.BRAND["navy"], xmax=xmax),
+                width="stretch", config={"displayModeBar": False},
+            )
+    with c2:
+        with theme.card(f"pa_{kind}_actual", f"{title} · Actual",
+                        f"{num(tot_a)} MPP", accent=theme.BRAND["orange"]):
+            st.plotly_chart(
+                charts.simple_hbar(lbl_a, val_a, theme.BRAND["orange"], xmax=xmax),
+                width="stretch", config={"displayModeBar": False},
+            )
+
+
+def render_pa_cost(plan, actual):
+    """Section Cost: total biaya plan vs aktual, per role."""
+    st.markdown(
+        theme.section_heading(4, "Cost", "estimasi biaya bulanan"),
+        unsafe_allow_html=True,
+    )
+    roles = ["Mechanic", "Electric", "Welder"]
+    lbl = [theme.ROLE_LABEL[r] for r in roles]
+    vp = [plan["cost"].get(r, {}).get("Tot", 0) for r in roles]
+    va = [actual["cost"].get(r, {}).get("Tot", 0) for r in roles]
+    xmax = max(vp + va + [1]) * 1.18
+
+    c1, c2 = st.columns(2, gap="small")
+    with c1:
+        with theme.card("pa_cost_plan", "Cost · Plan",
+                        rp_short(sum(vp)), accent=theme.BRAND["navy"]):
+            st.plotly_chart(
+                charts.simple_hbar(lbl, vp, theme.BRAND["navy"], xmax=xmax, money=True),
+                width="stretch", config={"displayModeBar": False},
+            )
+    with c2:
+        with theme.card("pa_cost_actual", "Cost · Actual",
+                        rp_short(sum(va)), accent=theme.BRAND["orange"]):
+            st.plotly_chart(
+                charts.simple_hbar(lbl, va, theme.BRAND["orange"], xmax=xmax, money=True),
+                width="stretch", config={"displayModeBar": False},
+            )
+
+
+def render_manpower_need_mode(backend):
+    """Mode "Manpower Need" — gabungan Summary dan Basecase All Unit.
+
+    Dua mode lama itu sebenarnya menampilkan dashboard yang sama; bedanya
+    hanya cakupan (seluruh site vs satu site). Jadi digabung: cakupan jadi
+    filter, bukan mode terpisah. Default "All Sites".
+
+    Filter kedua memilih SUMBER populasi unit — Plan (Sheet9) atau Actual
+    (tab 'Unit Actual Plan') — jadi angka kebutuhan manpower bisa dilihat
+    dari kedua dasar itu tanpa berpindah mode.
+    """
+    st.sidebar.markdown('<div class="dh-side-label">Filter</div>',
+                        unsafe_allow_html=True)
+    opsi = ["All Sites"] + list(backend.sites or [])
+    pilih = st.sidebar.selectbox("Site", options=opsi, index=0, key="mn_site")
+    with st.sidebar:
+        with st.container(key="mn_refresh"):
+            if st.button("Reload", width="stretch", key="mn_refresh_btn"):
+                _clear_caches()
+                get_units_actual.clear()
+                st.rerun()
+
+    head = st.columns([3, 1], gap="small")
+    with head[0]:
         st.markdown(
-            theme.empty_state("Tidak ada data aktual",
-                              "Tab 'Unit Actual Plan' belum berisi unit untuk "
-                              "site terpilih.", "\U0001F4CA"),
+            theme.header_band(
+                f"Manpower Need — {pilih}",
+                "Kebutuhan tenaga kerja berdasarkan populasi unit",
+                chips=[f"Site <b>{pilih}</b>"],
+            ),
             unsafe_allow_html=True,
         )
+    with head[1]:
+        with st.container(key="basis_pick"):
+            basis = st.selectbox("Basis", ["Plan", "Actual"], index=0,
+                                 key="mn_basis", label_visibility="collapsed")
+
+    try:
+        units_all = get_units() if basis == "Plan" else get_units_actual()
+    except BackendDataError as exc:
+        st.error(f"Unit data ({basis}) failed to load: {exc}")
+        return
+
+    sites = list(backend.sites or []) if pilih == "All Sites" else [pilih]
+    with st.spinner("Calculating…"):
+        b = _compute_bundle(sites, units_all, backend)
+
+    summary, cost, staff = b["summary"], b["cost"], b["staff"]
+    if not summary["mechanic_by_category"]:
+        st.markdown(
+            theme.empty_state(
+                "Belum ada hasil",
+                "Tidak ada site yang menghasilkan angka. Cek data unit pada "
+                f"sumber {basis}.", "⚠️"),
+            unsafe_allow_html=True,
+        )
+        return
+
+    unit_qty = sum(d["jumlah_unit"] for d in summary["detail_rows"])
+    render_formula_panel(
+        formula_items(backend, unit_qty, site=None if pilih == "All Sites" else pilih),
+        summary["detail_rows"], with_site=(pilih == "All Sites"),
+        skipped=summary["skipped_units"],
+    )
+
+    ops_acc = {"operator": 0.0, "foreman": 0.0, "supervisor": 0.0,
+               "superintendent": 0.0}
+    seen = {k: False for k in ops_acc}
+    miss = []
+    for s_ in sites:
+        o = compute_operation_manpower(s_, units_all.get(s_) or [], backend)
+        for k in ops_acc:
+            if o.get(k) is not None:
+                ops_acc[k] += o[k]; seen[k] = True
+        for m in o.get("missing", []):
+            if m not in miss:
+                miss.append(m)
+    ops = {k: (ops_acc[k] if seen[k] else None) for k in ops_acc}
+    ops["missing"] = miss
+
+    render_dashboard_body(summary, cost, staff, ops, actual_for(backend, sites))
+
+    with st.expander(f"Data unit — {basis}"):
+        render_unit_list(units_all, sites)
+
+
+def render_unit_list(units_map, sites):
+    """Daftar populasi unit, dipakai panel yang bisa disembunyikan."""
+    rows = []
+    for s_ in sites:
+        for u in (units_map.get(s_) or []):
+            rows.append({"Site": s_, "Category": u.category,
+                         "Jenis Unit": u.jenis_unit,
+                         "Jumlah Unit": u.jumlah_unit, "PA": u.pa})
+    if not rows:
+        st.info("Tidak ada baris unit untuk cakupan ini.")
+        return
+    st.caption(f"{len(rows)} baris · total {sum(r['Jumlah Unit'] for r in rows):,.0f} unit")
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True, height=340)
 
 
 def render_summary_mode(backend):
@@ -2197,9 +2383,12 @@ def main():
 
     # Summary dibuka lebih dulu: begitu kalkulator dibuka, angka gabungan
     # seluruh site langsung terlihat tanpa perlu memilih apa pun.
-    st.session_state.setdefault("app_mode", "summary")
-    if st.session_state.app_mode == "calculator":      # sisa state versi lama
-        st.session_state.app_mode = "summary"
+    st.session_state.setdefault("app_mode", "need")
+    # Mode lama (summary / multisite / calculator) sudah dilebur ke "need".
+    # Tanpa migrasi ini, sesi yang masih menyimpan nama lama akan mendarat di
+    # mode yang sudah tidak ada dan layarnya kosong.
+    if st.session_state.app_mode in ("summary", "multisite", "calculator"):
+        st.session_state.app_mode = "need"
 
     with st.sidebar:
         _sidebar_brand()
@@ -2211,9 +2400,8 @@ def main():
 
         st.markdown('<div class="dh-side-label">Mode</div>', unsafe_allow_html=True)
         for key, label, container in (
-            ("summary", "Summary", "nav_summary"),
-            ("multisite", "Basecase All Unit", "nav_basecase"),
-            ("planactual", "Basecase Plan vs Actual", "nav_planactual"),
+            ("need", "Manpower Need", "nav_need"),
+            ("planactual", "Manpower Plan vs Actual", "nav_planactual"),
         ):
             with st.container(key=container):
                 if st.button(label, width="stretch", key=f"btn_mode_{key}",
@@ -2221,12 +2409,10 @@ def main():
                     st.session_state.app_mode = key
                     st.rerun()
 
-    if st.session_state.app_mode == "summary":
-        render_summary_mode(backend)
-    elif st.session_state.app_mode == "planactual":
+    if st.session_state.app_mode == "planactual":
         render_plan_actual_mode(backend)
     else:
-        render_basecase_mode(backend)
+        render_manpower_need_mode(backend)
 
     if DEMO:
         st.caption("Demo mode: bundled sample data, not Google Sheets. "
