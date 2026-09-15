@@ -965,6 +965,55 @@ def load_backend_data(source: Optional[Union[str, pd.DataFrame]] = None) -> Back
 # =========================================================
 
 
+def load_unit_actual_data(source: Optional[Union[str, pd.DataFrame]] = None) -> Dict[str, List[UnitRow]]:
+    """Muat populasi unit AKTUAL (tab 'Unit Actual Plan').
+
+    Strukturnya sama persis dengan Sheet9, jadi memakai parser yang sama.
+    Dipisah jadi fungsi sendiri supaya cache Streamlit-nya terpisah: data Plan
+    dan Actual berubah pada waktu yang berbeda.
+
+    Kalau tab-nya belum ada, error-nya dibiarkan naik supaya pemanggil bisa
+    menampilkan pesan yang jelas — JANGAN diam-diam jatuh ke Sheet9, karena
+    itu akan menampilkan deviasi nol dan terlihat seolah Plan = Actual.
+    """
+    if isinstance(source, pd.DataFrame):
+        return parse_unit_sheet(source)
+    if isinstance(source, str):
+        return parse_unit_sheet(pd.read_csv(source.strip(), header=None, dtype=str))
+
+    env_path = os.getenv("UNIT_ACTUAL_CSV_PATH")
+    if env_path and os.path.exists(env_path):
+        return parse_unit_sheet(pd.read_csv(env_path, header=None, dtype=str))
+
+    from config import SPREADSHEET_ID, gsheet_csv_url
+    try:
+        from config import UNIT_ACTUAL_SHEET_NAME, UNIT_ACTUAL_SHEET_GID
+    except ImportError:
+        UNIT_ACTUAL_SHEET_NAME, UNIT_ACTUAL_SHEET_GID = "Unit Actual Plan", None
+
+    errors = []
+    try:
+        raw = pd.read_csv(gsheet_csv_url(UNIT_ACTUAL_SHEET_NAME, SPREADSHEET_ID),
+                          header=None, dtype=str)
+        return parse_unit_sheet(raw)
+    except Exception as e:
+        errors.append(f"[sheet-name '{UNIT_ACTUAL_SHEET_NAME}'] {e}")
+
+    if UNIT_ACTUAL_SHEET_GID:
+        url = (f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}"
+               f"/export?format=csv&gid={UNIT_ACTUAL_SHEET_GID}{_cache_bust()}")
+        try:
+            return parse_unit_sheet(pd.read_csv(url, header=None, dtype=str))
+        except Exception as e:
+            errors.append(f"[gid={UNIT_ACTUAL_SHEET_GID}] {e}")
+
+    raise BackendDataError(
+        f"Gagal memuat tab '{UNIT_ACTUAL_SHEET_NAME}' (populasi unit aktual).\n\n"
+        + "\n\n".join(errors)
+        + "\n\nCek nama tab-nya persis, atau isi config.UNIT_ACTUAL_SHEET_GID."
+    )
+
+
 def load_unit_data(source: Optional[Union[str, pd.DataFrame]] = None) -> Dict[str, List[UnitRow]]:
     """Muat data Unit per Site (Sheet9, v2).
 
@@ -1033,6 +1082,43 @@ def load_unit_data(source: Optional[Union[str, pd.DataFrame]] = None) -> Dict[st
     except Exception as e:
         logger.exception("Gagal memuat data Unit (Sheet9)")
         raise BackendDataError("Gagal memuat data Unit (Sheet9)") from e
+
+
+def load_unit_actual_data(
+    source: Optional[Union[str, pd.DataFrame]] = None,
+) -> Dict[str, List[UnitRow]]:
+    """Muat data Unit AKTUAL (tab 'Unit Actual Plan').
+
+    Layoutnya identik dengan Sheet9 (blok per site: Category | Jenis Unit |
+    Jumlah Unit | PA), jadi parser-nya dipakai ulang. Yang berbeda hanya tab
+    sumbernya.
+
+    Sengaja TIDAK melempar error kalau tabnya belum ada: mode Plan vs Actual
+    cukup menampilkan pesan "belum tersedia", sementara ketiga mode lain tetap
+    berjalan seperti biasa dengan data Plan.
+    """
+    if isinstance(source, pd.DataFrame):
+        return parse_unit_sheet(source)
+    if isinstance(source, str):
+        return parse_unit_sheet(pd.read_csv(source.strip(), header=None, dtype=str))
+
+    env_path = os.getenv("UNIT_ACTUAL_CSV_PATH")
+    if env_path and os.path.exists(env_path):
+        return parse_unit_sheet(pd.read_csv(env_path, header=None, dtype=str))
+
+    from config import SPREADSHEET_ID, UNIT_ACTUAL_SHEET_NAME, gsheet_csv_url
+    try:
+        raw = pd.read_csv(
+            gsheet_csv_url(UNIT_ACTUAL_SHEET_NAME, SPREADSHEET_ID),
+            header=None, dtype=str,
+        )
+        return parse_unit_sheet(raw)
+    except Exception as e:
+        raise BackendDataError(
+            f"Gagal memuat tab '{UNIT_ACTUAL_SHEET_NAME}'. Pastikan nama tabnya "
+            f"persis itu dan spreadsheet sudah di-share 'Anyone with the link "
+            f"- Viewer'. ({e})"
+        ) from e
 
 
 def load_staff_data(source: Optional[Union[str, pd.DataFrame]] = None) -> List[StaffRow]:

@@ -644,6 +644,13 @@ def inject_css():
             background: {NEUTRAL['wash']};
         }}
         .dh-ctrl tbody tr:last-child td {{ border-bottom: none; }}
+        .dh-pa tbody tr.grp td {{
+            background: {NEUTRAL['wash']}; font-weight: 800; font-size: 10px;
+            letter-spacing: .08em; text-transform: uppercase;
+            color: {NEUTRAL['text_muted']}; text-align: left; padding: 6px 10px;
+        }}
+        .dh-pa th {{ text-align: right; }}
+        .dh-pa th.lvl {{ text-align: left; }}
 
         .dh-table {{ width: 100%; border-collapse: collapse; font-size: 12px; }}
         .dh-table th {{
@@ -1404,6 +1411,90 @@ def card(key: str, title: str = "", sub: str = "", accent: str | None = None):
                 unsafe_allow_html=True,
             )
         yield container
+
+
+# Urutan tampil pasangan angka Aktual/Plan. Ditaruh sebagai konstanta karena
+# dipakai di KPI card maupun tabel — kalau urutannya perlu dibalik, cukup ubah
+# di sini, tidak perlu menyentuh tiap pemanggil.
+ACTUAL_FIRST = True
+
+
+def dual_value(actual, plan, dec: int = 0) -> str:
+    """Dua angka berdampingan: aktual dan plan, dipisah garis miring.
+
+    Keduanya dibedakan lewat BOBOT dan WARNA font, bukan lewat label, supaya
+    tetap ringkas di dalam KPI card: aktual tebal berwarna gelap (angka yang
+    paling sering dicari), plan lebih tipis dan abu-abu sebagai pembanding.
+    """
+    a = _fmt_id(actual, dec) if actual is not None else "–"
+    p = _fmt_id(plan, dec) if plan is not None else "–"
+    kiri, kanan = (a, p) if ACTUAL_FIRST else (p, a)
+    ck = NEUTRAL["text"] if ACTUAL_FIRST else NEUTRAL["text_muted"]
+    ckn = NEUTRAL["text_muted"] if ACTUAL_FIRST else NEUTRAL["text"]
+    wk = "800" if ACTUAL_FIRST else "600"
+    wkn = "600" if ACTUAL_FIRST else "800"
+    return (
+        f'<span style="color:{ck};font-weight:{wk}">{kiri}</span>'
+        f'<span style="color:{NEUTRAL["text_soft"]};font-weight:500;'
+        f'padding:0 4px">/</span>'
+        f'<span style="color:{ckn};font-weight:{wkn};font-size:.72em">{kanan}</span>'
+    )
+
+
+def dual_header() -> str:
+    """Keterangan urutan pasangan angka, dipakai sebagai sub-judul kartu."""
+    return "aktual / plan" if ACTUAL_FIRST else "plan / aktual"
+
+
+def plan_actual_table(rows: list[dict], first_col: str = "Level") -> str:
+    """Tabel Aktual | Plan | Deviasi per level.
+
+    `rows`: [{"level": str, "actual": v, "plan": v, "indent": bool,
+              "head": bool}]
+    Baris ber-`head` dipakai sebagai judul kelompok (NON-STAFF / STAFF).
+    """
+    navy = BRAND["navy"]
+    body = []
+    for r in rows:
+        if r.get("head"):
+            body.append(
+                f'<tr class="grp"><td colspan="4">{r["level"]}</td></tr>')
+            continue
+        a, p = r.get("actual"), r.get("plan")
+        dev = (a - p) if (a is not None and p is not None) else None
+        if dev is None:
+            dev_html = f'<span style="color:{NEUTRAL["text_soft"]}">–</span>'
+        elif dev > 0:
+            dev_html = (f'<span style="color:{STATUS["bad"]};font-weight:700">'
+                        f'<span style="font-size:9px;vertical-align:1px">&#9650;</span> '
+                        f'{_fmt_id(abs(dev))}</span>')
+        elif dev < 0:
+            dev_html = (f'<span style="color:{STATUS["warn"]};font-weight:700">'
+                        f'<span style="font-size:9px;vertical-align:1px">&#9660;</span> '
+                        f'{_fmt_id(abs(dev))}</span>')
+        else:
+            dev_html = f'<span style="color:{NEUTRAL["text_muted"]}">0</span>'
+        nm = ("&nbsp;&nbsp;&nbsp;" + r["level"]) if r.get("indent") else r["level"]
+        body.append(
+            "<tr>"
+            f'<td class="lvl">{nm}</td>'
+            f'<td style="color:{NEUTRAL["text"]};font-weight:800">'
+            f'{_fmt_id(a) if a is not None else "–"}</td>'
+            f'<td style="color:{NEUTRAL["text_muted"]};font-weight:600">'
+            f'{_fmt_id(p) if p is not None else "–"}</td>'
+            f'<td>{dev_html}</td></tr>'
+        )
+    return f"""
+    <table class="dh-ctrl dh-pa">
+      <thead><tr>
+        <th class="lvl">{first_col}</th>
+        <th style="background:{navy}">Aktual</th>
+        <th style="background:{navy}">Plan</th>
+        <th style="background:{navy}">Deviasi</th>
+      </tr></thead>
+      <tbody>{''.join(body)}</tbody>
+    </table>
+    """
 
 
 def control_ratio_table(rows: list[dict]) -> str:

@@ -63,6 +63,7 @@ from data_loader import (
     load_backend_data,
     load_staff_data,
     load_unit_data,
+    load_unit_actual_data,
 )
 
 st.set_page_config(
@@ -95,6 +96,16 @@ def get_units():
         import demo_data
         return demo_data.units()
     return load_unit_data()
+
+
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner="Loading actual unit data…")
+def get_units_actual():
+    """Populasi unit AKTUAL. Dipakai HANYA mode Plan vs Actual; tiga mode lain
+    tetap memakai data Plan (Sheet9)."""
+    if DEMO:
+        import demo_data
+        return demo_data.units()
+    return load_unit_actual_data()
 
 
 @st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner="Loading staff data…")
@@ -1616,6 +1627,205 @@ def render_basecase_mode(backend):
 
 
 
+def _compute_bundle(sites, units_map, backend):
+    """Hitung satu sisi (Plan atau Actual) untuk kumpulan site.
+
+    Mengembalikan dict berisi summary gabungan, staff, dan cost — bentuknya
+    sama seperti satu site, supaya dashboard yang sudah ada bisa dipakai
+    ulang tanpa perubahan.
+    """
+    mech, weld, elec = {}, {}, {}
+    oper_acc, plan_acc = {}, {}
+    supt_o = supt_p = 0
+    cost_acc = None
+    for s_ in sites:
+        rows = units_map.get(s_) or []
+        if not rows:
+            continue
+        try:
+            summ = compute_site_summary(s_, rows, backend, backend.tcf_for(s_))
+            stf = compute_staff_fte(
+                s_, summ["mechanic_by_category"], summ["welder_total"],
+                summ["electric_total"], get_staff(),
+                planner_load=summ.get("planner_load"))
+            cst = compute_site_cost(summ["mechanic_by_category"],
+                                    summ["welder_total"], summ["electric_total"])
+        except (CalculationError, BackendDataError, KeyError, ValueError):
+            continue
+        for cat, lv in summ["mechanic_by_category"].items():
+            tgt = mech.setdefault(cat, {m: 0.0 for m in MONTH_COLS})
+            for m in MONTH_COLS:
+                tgt[m] += lv.get(m, 0)
+        for src, tgt in ((summ["welder_total"], weld), (summ["electric_total"], elec)):
+            for m in MONTH_COLS:
+                tgt[m] = tgt.get(m, 0) + src.get(m, 0)
+        for r in stf["operational"]:
+            a = oper_acc.setdefault(r["posisi"], {"posisi": r["posisi"],
+                                                  "jumlah_mekanik": 0,
+                                                  "foreman": 0, "supervisor": 0})
+            for k in ("jumlah_mekanik", "foreman", "supervisor"):
+                a[k] += r.get(k, 0)
+        for r in stf["planner"]:
+            a = plan_acc.setdefault(r["posisi"], {"posisi": r["posisi"],
+                                                  "fte": 0, "foreman": 0,
+                                                  "supervisor": 0})
+            for k in ("fte", "foreman", "supervisor"):
+                a[k] += r.get(k, 0)
+        supt_o += stf.get("superintendent_operational", 0)
+        supt_p += stf.get("superintendent_planner", 0)
+        if cost_acc is None:
+            cost_acc = {k: dict(v) for k, v in cst.items()}
+        else:
+            for k, v in cst.items():
+                for m, val in v.items():
+                    cost_acc[k][m] = cost_acc[k].get(m, 0) + val
+
+    for d in (weld, elec):
+        d["Tot"] = sum(d.get(m, 0) for m in MONTH_COLS)
+    for lv in mech.values():
+        lv["Tot"] = sum(lv.get(m, 0) for m in MONTH_COLS)
+
+    summary = {
+        "mechanic_by_category": mech,
+        "welder_total": weld or {m: 0 for m in MONTH_COLS} | {"Tot": 0},
+        "electric_total": elec or {m: 0 for m in MONTH_COLS} | {"Tot": 0},
+        "detail_rows": [], "skipped_units": [],
+    }
+    staff = {
+        "operational": list(oper_acc.values()),
+        "planner": list(plan_acc.values()),
+        "superintendent_operational": supt_o,
+        "superintendent_planner": supt_p,
+        "superintendent": supt_o + supt_p,
+    }
+    return {"summary": summary, "staff": staff, "cost": cost_acc}
+
+
+def _level_totals(bundle):
+    """Headcount per level dari satu bundle."""
+    _m, _w, _e, _lv, non_staff = section_totals(bundle["summary"])
+    g = staff_group_counts(bundle["staff"])
+    t = group_totals(g)
+    return {
+        "Non-Staff": non_staff,
+        "Mechanic": non_staff,
+        "Foreman": t["Foreman"],
+        "Supervisor": t["Supervisor"],
+        "Superintendent": t["Superintendent"],
+        "Staff": t["Tot"],
+        "Total MPP": non_staff + t["Tot"],
+    }
+
+
+def render_plan_actual_mode(backend):
+    """Mode Basecase Plan vs Actual.
+
+    Memakai DUA sumber populasi unit: Sheet9 (Plan) dan tab 'Unit Actual Plan'
+    (Actual). Seluruh rantai perhitungan dijalankan dua kali lalu hasilnya
+    disandingkan — bukan sekadar membandingkan jumlah unit, supaya dampaknya
+    ke manpower dan cost ikut kelihatan.
+    """
+    st.sidebar.markdown('<div class="dh-side-label">Filter</div>',
+                        unsafe_allow_html=True)
+    opsi = ["All Sites"] + list(backend.sites or [])
+    pilih = st.sidebar.selectbox("Site", options=opsi, index=0, key="pa_site")
+    with st.sidebar:
+        with st.container(key="pa_refresh"):
+            if st.button("Reload", width="stretch", key="pa_refresh_btn"):
+                _clear_caches()
+                get_units_actual.clear()
+                st.rerun()
+
+    st.markdown(
+        theme.header_band(
+            "Basecase — Plan vs Actual",
+            "Populasi unit rencana dibanding realisasi, beserta dampaknya",
+            chips=[f"Site <b>{pilih}</b>"],
+        ),
+        unsafe_allow_html=True,
+    )
+
+    try:
+        plan_units = get_units()
+    except BackendDataError as exc:
+        st.error(f"Unit data (Plan) failed to load: {exc}")
+        return
+    try:
+        actual_units = get_units_actual()
+    except BackendDataError as exc:
+        st.warning(f"Data aktual belum bisa dibaca: {exc}")
+        return
+
+    sites = list(backend.sites or []) if pilih == "All Sites" else [pilih]
+
+    with st.spinner("Menghitung Plan dan Actual…"):
+        plan = _compute_bundle(sites, plan_units, backend)
+        actual = _compute_bundle(sites, actual_units, backend)
+
+    lp, la = _level_totals(plan), _level_totals(actual)
+
+    # ---------------- Section 1: Summary ----------------
+    st.markdown(
+        theme.section_heading(1, "Summary", f"total manpower · {theme.dual_header()}"),
+        unsafe_allow_html=True,
+    )
+    c = st.columns([1.2, 1, 1], gap="small")
+    for col, (label, key, accent, emo) in zip(c, (
+        ("Total MPP", "Total MPP", theme.BRAND["navy"], "\U0001F465"),
+        ("Non-Staff", "Non-Staff", theme.BRAND["orange"], "\U0001F527"),
+        ("Staff", "Staff", theme.BRAND["amber"], "\U0001F9D1"),
+    )):
+        with col:
+            dev = la[key] - lp[key]
+            arah = "lebih" if dev > 0 else ("kurang" if dev < 0 else "sama dengan")
+            sub = (f"{num(abs(dev))} {arah} dari plan" if dev
+                   else "sama dengan plan")
+            st.markdown(
+                theme.kpi_card(label, theme.dual_value(la[key], lp[key]),
+                               sub, accent=accent, emoji=emo, value_size=26),
+                unsafe_allow_html=True,
+            )
+
+    st.write("")
+    rows = [
+        {"level": "Non-Staff", "head": True},
+        {"level": "Mechanic", "actual": la["Mechanic"], "plan": lp["Mechanic"],
+         "indent": True},
+        {"level": "Staff", "head": True},
+        {"level": "Foreman", "actual": la["Foreman"], "plan": lp["Foreman"],
+         "indent": True},
+        {"level": "Supervisor", "actual": la["Supervisor"],
+         "plan": lp["Supervisor"], "indent": True},
+        {"level": "Superintendent", "actual": la["Superintendent"],
+         "plan": lp["Superintendent"], "indent": True},
+    ]
+    with theme.card("pa_summary", "Manpower per level",
+                    "deviasi = aktual − plan", accent=theme.BRAND["navy"]):
+        st.markdown(theme.plan_actual_table(rows), unsafe_allow_html=True)
+
+    # ---------------- Section 2-4: pakai dashboard AKTUAL ----------------
+    # Bagian Non-Staff / Staff / Cost menampilkan sisi AKTUAL, karena itulah
+    # kondisi yang sedang berjalan; angka plan sudah tersaji sebagai pembanding
+    # di section Summary di atas.
+    st.write("")
+    st.markdown(
+        '<div class="dh-note">Bagian di bawah menampilkan angka <b>aktual</b>. '
+        'Perbandingan dengan plan ada di section Summary.</div>',
+        unsafe_allow_html=True,
+    )
+    if actual["cost"]:
+        render_non_staff(actual["summary"])
+        render_staff(actual["staff"])
+        render_cost(actual["summary"], actual["cost"], actual["staff"])
+    else:
+        st.markdown(
+            theme.empty_state("Tidak ada data aktual",
+                              "Tab 'Unit Actual Plan' belum berisi unit untuk "
+                              "site terpilih.", "\U0001F4CA"),
+            unsafe_allow_html=True,
+        )
+
+
 def render_summary_mode(backend):
     refresh = render_summary_sidebar(backend)
 
@@ -2003,6 +2213,7 @@ def main():
         for key, label, container in (
             ("summary", "Summary", "nav_summary"),
             ("multisite", "Basecase All Unit", "nav_basecase"),
+            ("planactual", "Basecase Plan vs Actual", "nav_planactual"),
         ):
             with st.container(key=container):
                 if st.button(label, width="stretch", key=f"btn_mode_{key}",
@@ -2012,6 +2223,8 @@ def main():
 
     if st.session_state.app_mode == "summary":
         render_summary_mode(backend)
+    elif st.session_state.app_mode == "planactual":
+        render_plan_actual_mode(backend)
     else:
         render_basecase_mode(backend)
 

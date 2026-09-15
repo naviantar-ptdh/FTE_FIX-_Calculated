@@ -5,7 +5,15 @@ Konfigurasi global untuk FTE Calculator.
 # ID Google Spreadsheet (BACKEND) - sumber data referensi
 SPREADSHEET_ID = "1YRvXt0AE-dVBVwRvLtsb57Qz8DYd9YbVQlVbRD31C7I"
 BACKEND_SHEET_NAME = "BACKEND"
-UNIT_SHEET_NAME = "Sheet9"           # data input Unit per site (v2, auto-lookup)
+UNIT_SHEET_NAME = "Sheet9"           # data input Unit per site (v2, auto-lookup) -- PLAN
+# Tab berisi populasi unit AKTUAL. Strukturnya identik dengan Sheet9 (blok per
+# site: Category | Jenis Unit | Jumlah Unit | PA), jadi dibaca parser yang sama.
+# Dipakai HANYA oleh mode "Basecase Plan vs Actual"; mode lain tetap Plan.
+UNIT_ACTUAL_SHEET_NAME = "Unit Actual Plan"
+# Isi gid tab tsb kalau fetch berbasis nama gagal (lihat UNIT_SHEET_GID).
+UNIT_ACTUAL_SHEET_GID = None
+# Tab berisi populasi unit AKTUAL, dipakai mode "Basecase Plan vs Actual".
+UNIT_ACTUAL_SHEET_NAME = "Unit Actual Plan"
 STAFF_SHEET_NAME = "Hasil Staff"     # data FTE Staff (Foreman/SPV/Planner) per site (v2)
 
 # Fallback gid untuk tab Unit (Sheet9), dipakai jika fetch berbasis nama tab
