@@ -1295,7 +1295,9 @@ def inject_css():
            Streamlit versi ini merender selectbox lewat react-aria (bukan
            BaseWeb lagi), jadi selectornya menyasar .react-aria-ComboBox. */
         div[class*="st-key-period_pick"] {{ margin-top: 18px; }}
-        div[class*="st-key-period_pick"] .react-aria-ComboBox > div {{
+        div[class*="st-key-basis_pick"] {{ margin-bottom: 4px; }}
+        div[class*="st-key-period_pick"] .react-aria-ComboBox > div,
+        div[class*="st-key-basis_pick"] .react-aria-ComboBox > div {{
             background: {BRAND['navy']} !important;
             border: 1px solid {BRAND['navy']} !important;
             border-radius: 9px !important;
@@ -1303,20 +1305,24 @@ def inject_css():
             cursor: pointer !important;
             transition: background .16s ease;
         }}
-        div[class*="st-key-period_pick"] .react-aria-ComboBox > div:hover {{
+        div[class*="st-key-period_pick"] .react-aria-ComboBox > div:hover,
+        div[class*="st-key-basis_pick"] .react-aria-ComboBox > div:hover {{
             background: #1C2E48 !important;
         }}
-        div[class*="st-key-period_pick"] .react-aria-ComboBox input {{
+        div[class*="st-key-period_pick"] .react-aria-ComboBox input,
+        div[class*="st-key-basis_pick"] .react-aria-ComboBox input {{
             color: #FFFFFF !important;
             font-weight: 800 !important;
             font-size: 13px !important;
             cursor: pointer !important;
             caret-color: transparent;
         }}
-        div[class*="st-key-period_pick"] .react-aria-ComboBox svg {{
+        div[class*="st-key-period_pick"] .react-aria-ComboBox svg,
+        div[class*="st-key-basis_pick"] .react-aria-ComboBox svg {{
             fill: #FFFFFF !important; color: #FFFFFF !important;
         }}
-        div[class*="st-key-period_pick"] .react-aria-ComboBox button {{
+        div[class*="st-key-period_pick"] .react-aria-ComboBox button,
+        div[class*="st-key-basis_pick"] .react-aria-ComboBox button {{
             background: transparent !important;
         }}
 
