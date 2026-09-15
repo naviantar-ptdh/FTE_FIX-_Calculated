@@ -480,3 +480,96 @@ def role_donut(fte_table: dict, height: int = 210, show_legend: bool = True) -> 
         )
     )
     return fig
+
+
+def plan_actual_bars(labels, actual, plan, height: int = 300,
+                     money: bool = False) -> go.Figure:
+    """Batang horizontal berpasangan: Aktual vs Plan untuk tiap kategori.
+
+    Aktual digambar di ATAS dan berwarna pekat (oranye brand), Plan di bawah
+    dengan warna pudar — konsisten dengan urutan kolom di tabel (aktual dulu,
+    plan menyusul) supaya mata tidak perlu menerjemahkan dua konvensi.
+
+    Kategori diurutkan dari nilai aktual TERKECIL supaya batang terpanjang
+    berada di atas saat dirender Plotly.
+    """
+    rows = sorted(zip(labels, actual, plan), key=lambda t: t[1])
+    if not rows or all(a == 0 and p == 0 for _l, a, p in rows):
+        return _empty(height)
+    labels = [r[0] for r in rows]
+    actual = [r[1] for r in rows]
+    plan = [r[2] for r in rows]
+    fmt = rp if money else (lambda v: f"{num(v)} MPP")
+
+    fig = go.Figure()
+    for name, vals, color in (
+        ("Plan", plan, "#FFC9A3"),
+        ("Aktual", actual, BRAND["orange"]),
+    ):
+        fig.add_trace(go.Bar(
+            x=vals, y=labels, orientation="h", name=name,
+            marker=dict(color=color, line=dict(width=0)),
+            text=[num(v) for v in vals], textposition="outside",
+            textfont=dict(family="Archivo", size=10, color=NEUTRAL["text"]),
+            cliponaxis=False,
+            hovertext=[f"<b>{l}</b><br>{name}: {fmt(v)}" for l, v in zip(labels, vals)],
+            hovertemplate="%{hovertext}<extra></extra>",
+        ))
+
+    top = max(max(actual), max(plan)) or 1
+    fig.update_layout(**_layout(
+        height,
+        barmode="group", bargap=0.28, bargroupgap=0.08,
+        margin=dict(l=6, r=52, t=6, b=6),
+        xaxis=dict(visible=False, range=[0, top * 1.18]),
+        yaxis=dict(showgrid=False, ticksuffix="  ",
+                   tickfont=dict(family="Public Sans", size=11,
+                                 color=NEUTRAL["text"])),
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0,
+                    font=dict(family="Public Sans", size=10.5,
+                              color=NEUTRAL["text_muted"])),
+    ))
+    return fig
+
+
+def simple_hbar(labels, values, color, height: int = 320,
+                xmax: float | None = None, money: bool = False) -> go.Figure:
+    """Batang mendatar satu warna, untuk disandingkan Plan vs Actual.
+
+    `xmax` sengaja WAJIB diisi dari pemanggil saat dipakai bersisian: kalau
+    tiap grafik menghitung skalanya sendiri, batang bernilai kecil bisa
+    tampak sepanjang batang bernilai besar di grafik sebelahnya — persis
+    salah-baca yang ingin dihindari saat membandingkan.
+
+    Kategori diurutkan dari nilai TERKECIL supaya Plotly menggambar batang
+    terpanjang di atas.
+    """
+    rows = sorted(zip(labels, values), key=lambda t: t[1])
+    if not rows or all(v == 0 for _l, v in rows):
+        return _empty(height)
+    labels = [r[0] for r in rows]
+    values = [r[1] for r in rows]
+    fmt = rp_short if money else num
+
+    fig = go.Figure(go.Bar(
+        x=values, y=labels, orientation="h",
+        marker=dict(color=color, line=dict(width=0)),
+        text=[fmt(v) for v in values],
+        textposition="outside",
+        textfont=dict(family="Archivo", size=11, color=NEUTRAL["text"]),
+        cliponaxis=False,
+        hovertext=[f"<b>{l}</b><br>{fmt(v)}" for l, v in zip(labels, values)],
+        hovertemplate="%{hovertext}<extra></extra>",
+    ))
+    fig.update_layout(**_layout(
+        height,
+        margin=dict(l=6, r=54, t=6, b=6),
+        xaxis=dict(visible=False, range=[0, xmax or max(values) * 1.18]),
+        yaxis=dict(
+            tickfont=dict(family="Public Sans", size=11, color=NEUTRAL["text"]),
+            showgrid=False, ticksuffix="  ",
+        ),
+        bargap=0.34,
+    ))
+    return fig
