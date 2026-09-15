@@ -1638,6 +1638,10 @@ def _compute_bundle(sites, units_map, backend):
     oper_acc, plan_acc = {}, {}
     supt_o = supt_p = 0
     cost_acc = None
+    # Baris detail unit ikut dikumpulkan: dipakai panel rumus (unit quantity)
+    # dan daftar unit. Sebelumnya dikosongkan, sehingga "Unit quantity" selalu
+    # 0 dan panel daftar unit kosong padahal datanya ada.
+    detail_all, skipped_all = [], []
     for s_ in sites:
         rows = units_map.get(s_) or []
         if not rows:
@@ -1671,6 +1675,11 @@ def _compute_bundle(sites, units_map, backend):
                                                   "supervisor": 0})
             for k in ("fte", "foreman", "supervisor"):
                 a[k] += r.get(k, 0)
+        for d in (summ.get("detail_rows") or []):
+            d2 = dict(d)
+            d2.setdefault("site", s_)
+            detail_all.append(d2)
+        skipped_all.extend(summ.get("skipped_units") or [])
         supt_o += stf.get("superintendent_operational", 0)
         supt_p += stf.get("superintendent_planner", 0)
         if cost_acc is None:
@@ -1689,7 +1698,7 @@ def _compute_bundle(sites, units_map, backend):
         "mechanic_by_category": mech,
         "welder_total": weld or {m: 0 for m in MONTH_COLS} | {"Tot": 0},
         "electric_total": elec or {m: 0 for m in MONTH_COLS} | {"Tot": 0},
-        "detail_rows": [], "skipped_units": [],
+        "detail_rows": detail_all, "skipped_units": skipped_all,
     }
     staff = {
         "operational": list(oper_acc.values()),
@@ -1933,17 +1942,20 @@ def render_manpower_need_mode(backend):
                 get_units_actual.clear()
                 st.rerun()
 
-    head = st.columns([3, 1], gap="small")
-    with head[0]:
-        st.markdown(
-            theme.header_band(
-                f"Manpower Need — {pilih}",
-                "Kebutuhan tenaga kerja berdasarkan populasi unit",
-                chips=[f"Site <b>{pilih}</b>"],
-            ),
-            unsafe_allow_html=True,
-        )
-    with head[1]:
+    st.markdown(
+        theme.header_band(
+            f"Manpower Need — {pilih}",
+            "Kebutuhan tenaga kerja berdasarkan populasi unit",
+            chips=[f"Site <b>{pilih}</b>"],
+        ),
+        unsafe_allow_html=True,
+    )
+
+    # Filter basis diletakkan DI BAWAH header, bukan di sampingnya: ia mengubah
+    # seluruh angka di halaman ini, jadi lebih tepat dibaca sebagai kontrol
+    # halaman daripada sebagai bagian dari judul.
+    fcol, _sisa = st.columns([1, 4], gap="small")
+    with fcol:
         with st.container(key="basis_pick"):
             basis = st.selectbox("Basis", ["Plan", "Actual"], index=0,
                                  key="mn_basis", label_visibility="collapsed")
