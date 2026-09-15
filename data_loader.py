@@ -993,7 +993,8 @@ def load_unit_actual_data(source: Optional[Union[str, pd.DataFrame]] = None) -> 
 
     errors = []
     try:
-        raw = pd.read_csv(gsheet_csv_url(UNIT_ACTUAL_SHEET_NAME, SPREADSHEET_ID),
+        raw = pd.read_csv(gsheet_csv_url(UNIT_ACTUAL_SHEET_NAME, SPREADSHEET_ID,
+                                        two_row_header=True),
                           header=None, dtype=str)
         return parse_unit_sheet(raw)
     except Exception as e:
@@ -1050,7 +1051,9 @@ def load_unit_data(source: Optional[Union[str, pd.DataFrame]] = None) -> Dict[st
 
         errors = []
         try:
-            raw = pd.read_csv(gsheet_csv_url(UNIT_SHEET_NAME, SPREADSHEET_ID), header=None, dtype=str)
+            raw = pd.read_csv(gsheet_csv_url(UNIT_SHEET_NAME, SPREADSHEET_ID,
+                                             two_row_header=True),
+                              header=None, dtype=str)
             return parse_unit_sheet(raw)
         except BackendDataError as e:
             errors.append(f"[gviz sheet-name url, sheet='{UNIT_SHEET_NAME}'] {e}")
@@ -1109,7 +1112,8 @@ def load_unit_actual_data(
     from config import SPREADSHEET_ID, UNIT_ACTUAL_SHEET_NAME, gsheet_csv_url
     try:
         raw = pd.read_csv(
-            gsheet_csv_url(UNIT_ACTUAL_SHEET_NAME, SPREADSHEET_ID),
+            gsheet_csv_url(UNIT_ACTUAL_SHEET_NAME, SPREADSHEET_ID,
+                           two_row_header=True),
             header=None, dtype=str,
         )
         return parse_unit_sheet(raw)
