@@ -1773,9 +1773,15 @@ def render_plan_actual_mode(backend):
 
     lp, la = _level_totals(plan), _level_totals(actual)
 
+    # Daftar unit ditaruh DI ATAS, sejajar dengan letaknya di Manpower Need,
+    # dan bisa disembunyikan.
+    n_unit = sum(len(plan_units.get(s_) or []) for s_ in sites)
+    with st.expander(f"Unit list — {n_unit} rows", expanded=False):
+        render_unit_list_pa(plan_units, actual_units, sites)
+
     # ---------------- Section 1: Summary ----------------
     st.markdown(
-        theme.section_heading(1, "Summary", f"total manpower · {theme.dual_header()}"),
+        theme.section_heading(1, "Summary", "total manpower · plan / aktual"),
         unsafe_allow_html=True,
     )
     c = st.columns([1.2, 1, 1], gap="small")
@@ -1826,13 +1832,6 @@ def render_plan_actual_mode(backend):
     if actual["cost"] and plan["cost"]:
         render_pa_cost(plan, actual)
 
-    st.write("")
-    with st.expander("Data unit — Plan vs Actual"):
-        t1, t2 = st.tabs(["Plan", "Actual"])
-        with t1:
-            render_unit_list(plan_units, sites)
-        with t2:
-            render_unit_list(actual_units, sites)
 
 
 def _section_series(bundle):
@@ -1853,175 +1852,149 @@ def _staff_series(bundle):
     return lbl, val
 
 
-def render_pa_split_section(no, title, sub, plan, actual, kind):
-    """Satu section dibelah dua: grafik plan di kiri, aktual di kanan."""
-    if kind == "nonstaff":
-        lbl_p, val_p = _section_series(plan)
-        lbl_a, val_a = _section_series(actual)
-    else:
-        lbl_p, val_p = _staff_series(plan)
-        lbl_a, val_a = _staff_series(actual)
+def _levels_by_section(bundle):
+    """(labels, [(segmen, nilai per label)]) untuk Non-Staff, dipecah M1-M3."""
+    summ = bundle["summary"]
+    labels = list(summ["mechanic_by_category"].keys()) + ["Welder", "Electrician"]
+    series = []
+    for m in MONTH_COLS:
+        vals = [summ["mechanic_by_category"][c].get(m, 0)
+                for c in summ["mechanic_by_category"]]
+        vals.append(summ["welder_total"].get(m, 0))
+        vals.append(summ["electric_total"].get(m, 0))
+        series.append((m, vals))
+    return labels, series
 
-    tot_p, tot_a = sum(val_p), sum(val_a)
+
+def _staff_by_group(bundle):
+    """(labels, [(grup, nilai per label)]) untuk Staff, dipecah Operational vs
+    Planning — dua segmen, bukan tiga seperti Non-Staff."""
+    g = staff_group_counts(bundle["staff"])
+    labels = ["Foreman", "Supervisor", "Superintendent"]
+    return labels, [
+        ("Operational", [g["Operational"][r] for r in labels]),
+        ("Planning", [g["Planner"][r] for r in labels]),
+    ]
+
+
+def render_pa_split_section(no, title, sub, plan, actual, kind):
+    """Satu section dibelah dua: Plan di kiri (navy), Actual di kanan (oranye).
+
+    Kedua sisi memakai jenis grafik, urutan label, DAN skala X yang sama —
+    tiga hal itu yang membuat panjang batang bisa dibandingkan sekilas tanpa
+    membaca angkanya.
+    """
+    if kind == "nonstaff":
+        lbl, sp = _levels_by_section(plan)
+        _l2, sa = _levels_by_section(actual)
+        shades_p, shades_a = charts.PLAN_SHADES, charts.ACTUAL_SHADES
+    else:
+        lbl, sp = _staff_by_group(plan)
+        _l2, sa = _staff_by_group(actual)
+        shades_p = [charts.PLAN_SHADES[0], charts.PLAN_SHADES[2]]
+        shades_a = [charts.ACTUAL_SHADES[0], charts.ACTUAL_SHADES[2]]
+
+    tot_p = sum(sum(v) for _n, v in sp)
+    tot_a = sum(sum(v) for _n, v in sa)
     st.markdown(
         theme.section_heading(no, title, sub,
                               tag=f"{num(tot_p)} → {num(tot_a)} MPP"),
         unsafe_allow_html=True,
     )
 
-    # Skala X disamakan di kedua sisi. Tanpa ini Plotly memberi skala berbeda
-    # pada tiap grafik, dan batang yang lebih pendek bisa terlihat lebih
-    # panjang — persis kesalahan baca yang ingin dihindari.
-    xmax = max(val_p + val_a + [1]) * 1.18
+    tp = [sum(x[1][i] for x in sp) for i in range(len(lbl))]
+    ta = [sum(x[1][i] for x in sa) for i in range(len(lbl))]
+    xmax = max(tp + ta + [1]) * 1.20
+    h = 300 if kind == "nonstaff" else 220
 
     c1, c2 = st.columns(2, gap="small")
     with c1:
         with theme.card(f"pa_{kind}_plan", f"{title} · Plan",
                         f"{num(tot_p)} MPP", accent=theme.BRAND["navy"]):
             st.plotly_chart(
-                charts.simple_hbar(lbl_p, val_p, theme.BRAND["navy"], xmax=xmax),
-                width="stretch", config={"displayModeBar": False},
-            )
+                charts.stacked_hbar(lbl, sp, shades_p, height=h, xmax=xmax),
+                width="stretch", config={"displayModeBar": False})
     with c2:
         with theme.card(f"pa_{kind}_actual", f"{title} · Actual",
                         f"{num(tot_a)} MPP", accent=theme.BRAND["orange"]):
             st.plotly_chart(
-                charts.simple_hbar(lbl_a, val_a, theme.BRAND["orange"], xmax=xmax),
-                width="stretch", config={"displayModeBar": False},
-            )
+                charts.stacked_hbar(lbl, sa, shades_a, height=h, xmax=xmax),
+                width="stretch", config={"displayModeBar": False})
 
 
 def render_pa_cost(plan, actual):
-    """Section Cost: total biaya plan vs aktual, per role."""
-    st.markdown(
-        theme.section_heading(4, "Cost", "estimasi biaya bulanan"),
-        unsafe_allow_html=True,
-    )
+    """Section Cost: biaya Plan vs Actual per role, dengan filter periode."""
+    head = st.columns([3, 1], gap="small")
+    with head[0]:
+        st.markdown(
+            theme.section_heading(4, "Cost", "biaya plan vs aktual"),
+            unsafe_allow_html=True)
+    with head[1]:
+        with st.container(key="pa_period_pick"):
+            per = st.selectbox("Period", ["Monthly", "Yearly"], index=0,
+                               key="pa_cost_period", label_visibility="collapsed")
+    factor = 1 if per == "Monthly" else MONTHS_PER_YEAR
+    suffix = "per month" if factor == 1 else "per year"
+
     roles = ["Mechanic", "Electric", "Welder"]
     lbl = [theme.ROLE_LABEL[r] for r in roles]
-    vp = [plan["cost"].get(r, {}).get("Tot", 0) for r in roles]
-    va = [actual["cost"].get(r, {}).get("Tot", 0) for r in roles]
-    xmax = max(vp + va + [1]) * 1.18
+    sp, sa = [], []
+    for m in MONTH_COLS:
+        sp.append((m, [plan["cost"].get(r, {}).get(m, 0) * factor for r in roles]))
+        sa.append((m, [actual["cost"].get(r, {}).get(m, 0) * factor for r in roles]))
+    tot_p = sum(sum(v) for _n, v in sp)
+    tot_a = sum(sum(v) for _n, v in sa)
+    tp = [sum(x[1][i] for x in sp) for i in range(len(lbl))]
+    ta = [sum(x[1][i] for x in sa) for i in range(len(lbl))]
+    xmax = max(tp + ta + [1]) * 1.22
 
     c1, c2 = st.columns(2, gap="small")
     with c1:
-        with theme.card("pa_cost_plan", "Cost · Plan",
-                        rp_short(sum(vp)), accent=theme.BRAND["navy"]):
+        with theme.card("pa_cost_plan", f"Cost · Plan · {suffix}",
+                        rp_short(tot_p), accent=theme.BRAND["navy"]):
             st.plotly_chart(
-                charts.simple_hbar(lbl, vp, theme.BRAND["navy"], xmax=xmax, money=True),
-                width="stretch", config={"displayModeBar": False},
-            )
+                charts.stacked_hbar(lbl, sp, charts.PLAN_SHADES, height=220,
+                                    xmax=xmax, money=True),
+                width="stretch", config={"displayModeBar": False})
     with c2:
-        with theme.card("pa_cost_actual", "Cost · Actual",
-                        rp_short(sum(va)), accent=theme.BRAND["orange"]):
+        with theme.card("pa_cost_actual", f"Cost · Actual · {suffix}",
+                        rp_short(tot_a), accent=theme.BRAND["orange"]):
             st.plotly_chart(
-                charts.simple_hbar(lbl, va, theme.BRAND["orange"], xmax=xmax, money=True),
-                width="stretch", config={"displayModeBar": False},
-            )
+                charts.stacked_hbar(lbl, sa, charts.ACTUAL_SHADES, height=220,
+                                    xmax=xmax, money=True),
+                width="stretch", config={"displayModeBar": False})
 
 
-def render_manpower_need_mode(backend):
-    """Mode "Manpower Need" — gabungan Summary dan Basecase All Unit.
+def render_unit_list_pa(plan_units, actual_units, sites):
+    """Satu tabel gabungan Plan vs Actual.
 
-    Dua mode lama itu sebenarnya menampilkan dashboard yang sama; bedanya
-    hanya cakupan (seluruh site vs satu site). Jadi digabung: cakupan jadi
-    filter, bukan mode terpisah. Default "All Sites".
-
-    Filter kedua memilih SUMBER populasi unit — Plan (Sheet9) atau Actual
-    (tab 'Unit Actual Plan') — jadi angka kebutuhan manpower bisa dilihat
-    dari kedua dasar itu tanpa berpindah mode.
+    Site / Category / Jenis Unit pasti sama di kedua sumber, jadi ditulis
+    sekali saja; yang dipecah hanya Jumlah Unit dan PA. Baris dicocokkan
+    lewat kunci (site, category, jenis unit) — bukan lewat urutan baris,
+    karena urutan di kedua tab tidak dijamin sama.
     """
-    st.sidebar.markdown('<div class="dh-side-label">Filter</div>',
-                        unsafe_allow_html=True)
-    opsi = ["All Sites"] + list(backend.sites or [])
-    pilih = st.sidebar.selectbox("Site", options=opsi, index=0, key="mn_site")
-    with st.sidebar:
-        with st.container(key="mn_refresh"):
-            if st.button("Reload", width="stretch", key="mn_refresh_btn"):
-                _clear_caches()
-                get_units_actual.clear()
-                st.rerun()
-
-    st.markdown(
-        theme.header_band(
-            f"Manpower Need — {pilih}",
-            "Kebutuhan tenaga kerja berdasarkan populasi unit",
-            chips=[f"Site <b>{pilih}</b>"],
-        ),
-        unsafe_allow_html=True,
-    )
-
-    # Filter basis diletakkan DI BAWAH header, bukan di sampingnya: ia mengubah
-    # seluruh angka di halaman ini, jadi lebih tepat dibaca sebagai kontrol
-    # halaman daripada sebagai bagian dari judul.
-    fcol, _sisa = st.columns([1, 4], gap="small")
-    with fcol:
-        with st.container(key="basis_pick"):
-            basis = st.selectbox("Basis", ["Plan", "Actual"], index=0,
-                                 key="mn_basis", label_visibility="collapsed")
-
-    try:
-        units_all = get_units() if basis == "Plan" else get_units_actual()
-    except BackendDataError as exc:
-        st.error(f"Unit data ({basis}) failed to load: {exc}")
-        return
-
-    sites = list(backend.sites or []) if pilih == "All Sites" else [pilih]
-    with st.spinner("Calculating…"):
-        b = _compute_bundle(sites, units_all, backend)
-
-    summary, cost, staff = b["summary"], b["cost"], b["staff"]
-    if not summary["mechanic_by_category"]:
-        st.markdown(
-            theme.empty_state(
-                "Belum ada hasil",
-                "Tidak ada site yang menghasilkan angka. Cek data unit pada "
-                f"sumber {basis}.", "⚠️"),
-            unsafe_allow_html=True,
-        )
-        return
-
-    unit_qty = sum(d["jumlah_unit"] for d in summary["detail_rows"])
-    render_formula_panel(
-        formula_items(backend, unit_qty, site=None if pilih == "All Sites" else pilih),
-        summary["detail_rows"], with_site=(pilih == "All Sites"),
-        skipped=summary["skipped_units"],
-    )
-
-    ops_acc = {"operator": 0.0, "foreman": 0.0, "supervisor": 0.0,
-               "superintendent": 0.0}
-    seen = {k: False for k in ops_acc}
-    miss = []
-    for s_ in sites:
-        o = compute_operation_manpower(s_, units_all.get(s_) or [], backend)
-        for k in ops_acc:
-            if o.get(k) is not None:
-                ops_acc[k] += o[k]; seen[k] = True
-        for m in o.get("missing", []):
-            if m not in miss:
-                miss.append(m)
-    ops = {k: (ops_acc[k] if seen[k] else None) for k in ops_acc}
-    ops["missing"] = miss
-
-    render_dashboard_body(summary, cost, staff, ops, actual_for(backend, sites))
-
-    with st.expander(f"Data unit — {basis}"):
-        render_unit_list(units_all, sites)
-
-
-def render_unit_list(units_map, sites):
-    """Daftar populasi unit, dipakai panel yang bisa disembunyikan."""
-    rows = []
-    for s_ in sites:
-        for u in (units_map.get(s_) or []):
-            rows.append({"Site": s_, "Category": u.category,
-                         "Jenis Unit": u.jenis_unit,
-                         "Jumlah Unit": u.jumlah_unit, "PA": u.pa})
-    if not rows:
+    idx = {}
+    for kind, umap in (("plan", plan_units), ("actual", actual_units)):
+        for s_ in sites:
+            for u in (umap.get(s_) or []):
+                k = (s_, u.category, u.jenis_unit)
+                idx.setdefault(k, {})[kind] = u
+    if not idx:
         st.info("Tidak ada baris unit untuk cakupan ini.")
         return
-    st.caption(f"{len(rows)} baris · total {sum(r['Jumlah Unit'] for r in rows):,.0f} unit")
-    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True, height=340)
+
+    rows = []
+    for (s_, cat, ju), v in idx.items():
+        pl, ac = v.get("plan"), v.get("actual")
+        rows.append({
+            "site": s_, "category": cat, "jenis": ju,
+            "plan_qty": pl.jumlah_unit if pl else None,
+            "plan_pa": pl.pa if pl else None,
+            "act_qty": ac.jumlah_unit if ac else None,
+            "act_pa": ac.pa if ac else None,
+        })
+    rows.sort(key=lambda r: (r["site"], r["category"], r["jenis"]))
+    st.markdown(theme.unit_plan_actual_table(rows), unsafe_allow_html=True)
 
 
 def render_summary_mode(backend):
