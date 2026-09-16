@@ -491,6 +491,20 @@ def inject_css():
             border-right: 1px solid {NEUTRAL['border']};
             min-width: 268px !important;
         }}
+
+        /* Daftar pilihan selectbox dibatasi tingginya dan diberi scroll
+           sendiri, plus z-index tinggi. Tanpa ini, dropdown Site di sidebar
+           terpotong tepi bawah panel: pilihan terakhir (mis. SSCP) tampil
+           setengah dan tidak bisa diklik. Membuat sidebar overflow:visible
+           bukan jawabannya — itu mematikan scroll sidebar-nya sendiri. */
+        .react-aria-Popover, [data-testid="stSelectboxVirtualDropdown"] {{
+            z-index: 10000 !important;
+        }}
+        .react-aria-ListBox, [data-testid="stSelectboxVirtualDropdown"] ul,
+        [role="listbox"] {{
+            max-height: 240px !important;
+            overflow-y: auto !important;
+        }}
         section[data-testid="stSidebar"] .dh-side-brand {{
             display: flex; align-items: center; gap: 10px;
             padding: 2px 0 14px 0; margin-bottom: 8px;
@@ -651,6 +665,30 @@ def inject_css():
         }}
         .dh-pa th {{ text-align: right; }}
         .dh-pa th.lvl {{ text-align: left; }}
+
+        /* ---- Daftar unit Plan vs Actual (header bergrup) --------------- */
+        .dh-unit-wrap {{ max-height: 420px; overflow: auto; border-radius: 8px; }}
+        .dh-unit {{
+            width: 100%; border-collapse: collapse; font-size: 12px;
+            font-variant-numeric: tabular-nums;
+        }}
+        .dh-unit th {{
+            color: #fff; padding: 7px 10px; text-align: right;
+            font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase;
+            font-weight: 800; position: sticky; top: 0; z-index: 2;
+            border-right: 1px solid rgba(255,255,255,.14);
+        }}
+        .dh-unit tr.grp th {{ text-align: center; }}
+        .dh-unit tr.sub th {{ top: 30px; }}
+        .dh-unit th.txt {{
+            text-align: left; background: {BRAND['navy']};
+            vertical-align: middle;
+        }}
+        .dh-unit td {{
+            text-align: right; padding: 6px 10px;
+            border-bottom: 1px solid {NEUTRAL['border_soft']};
+        }}
+        .dh-unit td.txt {{ text-align: left; color: {NEUTRAL['text']}; }}
 
         .dh-table {{ width: 100%; border-collapse: collapse; font-size: 12px; }}
         .dh-table th {{
@@ -1296,7 +1334,9 @@ def inject_css():
            BaseWeb lagi), jadi selectornya menyasar .react-aria-ComboBox. */
         div[class*="st-key-period_pick"] {{ margin-top: 18px; }}
         div[class*="st-key-basis_pick"] {{ margin-bottom: 4px; }}
+        div[class*="st-key-pa_period_pick"] {{ margin-top: 18px; }}
         div[class*="st-key-period_pick"] .react-aria-ComboBox > div,
+        div[class*="st-key-pa_period_pick"] .react-aria-ComboBox > div,
         div[class*="st-key-basis_pick"] .react-aria-ComboBox > div {{
             background: {BRAND['navy']} !important;
             border: 1px solid {BRAND['navy']} !important;
@@ -1306,10 +1346,12 @@ def inject_css():
             transition: background .16s ease;
         }}
         div[class*="st-key-period_pick"] .react-aria-ComboBox > div:hover,
+        div[class*="st-key-pa_period_pick"] .react-aria-ComboBox > div:hover,
         div[class*="st-key-basis_pick"] .react-aria-ComboBox > div:hover {{
             background: #1C2E48 !important;
         }}
         div[class*="st-key-period_pick"] .react-aria-ComboBox input,
+        div[class*="st-key-pa_period_pick"] .react-aria-ComboBox input,
         div[class*="st-key-basis_pick"] .react-aria-ComboBox input {{
             color: #FFFFFF !important;
             font-weight: 800 !important;
@@ -1318,10 +1360,12 @@ def inject_css():
             caret-color: transparent;
         }}
         div[class*="st-key-period_pick"] .react-aria-ComboBox svg,
+        div[class*="st-key-pa_period_pick"] .react-aria-ComboBox svg,
         div[class*="st-key-basis_pick"] .react-aria-ComboBox svg {{
             fill: #FFFFFF !important; color: #FFFFFF !important;
         }}
         div[class*="st-key-period_pick"] .react-aria-ComboBox button,
+        div[class*="st-key-pa_period_pick"] .react-aria-ComboBox button,
         div[class*="st-key-basis_pick"] .react-aria-ComboBox button {{
             background: transparent !important;
         }}
@@ -1812,3 +1856,59 @@ def legend_html(items: list[tuple[str, str]]) -> str:
         for lbl, c in items
     )
     return f'<div class="dh-legend">{its}</div>'
+
+
+def unit_plan_actual_table(rows: list[dict]) -> str:
+    """Daftar unit dengan header bergrup: Plan dan Actual berbagi Site /
+    Category / Jenis Unit, hanya Jumlah Unit dan PA yang dipecah.
+
+    Selisih Jumlah Unit ditandai supaya baris yang berubah langsung kelihatan
+    tanpa perlu membandingkan kolom satu per satu.
+    """
+    navy, orange = BRAND["navy"], BRAND["orange_deep"]
+
+    def n(v, dec=0):
+        if v is None:
+            return f'<span style="color:{NEUTRAL["text_soft"]}">–</span>'
+        s = f"{v:,.{dec}f}".replace(",", "_").replace(".", ",").replace("_", ".")
+        return s
+
+    body = []
+    for r in rows:
+        pq, aq = r["plan_qty"], r["act_qty"]
+        beda = (pq is not None and aq is not None and pq != aq) or (pq is None) != (aq is None)
+        mark = ' style="background:#FFF7F0"' if beda else ""
+        body.append(
+            f"<tr{mark}>"
+            f'<td class="txt">{r["site"]}</td>'
+            f'<td class="txt">{r["category"]}</td>'
+            f'<td class="txt">{r["jenis"]}</td>'
+            f'<td style="color:{navy};font-weight:700">{n(pq)}</td>'
+            f'<td style="color:{navy}">{n(r["plan_pa"], 0)}</td>'
+            f'<td style="color:{orange};font-weight:700">{n(aq)}</td>'
+            f'<td style="color:{orange}">{n(r["act_pa"], 0)}</td>'
+            "</tr>"
+        )
+
+    return f"""
+    <div class="dh-unit-wrap">
+    <table class="dh-unit">
+      <thead>
+        <tr class="grp">
+          <th rowspan="2" class="txt">Site</th>
+          <th rowspan="2" class="txt">Category</th>
+          <th rowspan="2" class="txt">Jenis Unit</th>
+          <th colspan="2" style="background:{navy}">Plan</th>
+          <th colspan="2" style="background:{orange}">Aktual</th>
+        </tr>
+        <tr class="sub">
+          <th style="background:{navy}">Jumlah Unit</th>
+          <th style="background:{navy}">PA</th>
+          <th style="background:{orange}">Jumlah Unit</th>
+          <th style="background:{orange}">PA</th>
+        </tr>
+      </thead>
+      <tbody>{''.join(body)}</tbody>
+    </table>
+    </div>
+    """
