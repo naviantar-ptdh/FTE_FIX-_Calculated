@@ -492,19 +492,6 @@ def inject_css():
             min-width: 268px !important;
         }}
 
-        /* Daftar pilihan selectbox dibatasi tingginya dan diberi scroll
-           sendiri, plus z-index tinggi. Tanpa ini, dropdown Site di sidebar
-           terpotong tepi bawah panel: pilihan terakhir (mis. SSCP) tampil
-           setengah dan tidak bisa diklik. Membuat sidebar overflow:visible
-           bukan jawabannya — itu mematikan scroll sidebar-nya sendiri. */
-        .react-aria-Popover, [data-testid="stSelectboxVirtualDropdown"] {{
-            z-index: 10000 !important;
-        }}
-        .react-aria-ListBox, [data-testid="stSelectboxVirtualDropdown"] ul,
-        [role="listbox"] {{
-            max-height: 240px !important;
-            overflow-y: auto !important;
-        }}
         section[data-testid="stSidebar"] .dh-side-brand {{
             display: flex; align-items: center; gap: 10px;
             padding: 2px 0 14px 0; margin-bottom: 8px;
@@ -1334,10 +1321,12 @@ def inject_css():
            BaseWeb lagi), jadi selectornya menyasar .react-aria-ComboBox. */
         div[class*="st-key-period_pick"] {{ margin-top: 18px; }}
         div[class*="st-key-basis_pick"] {{ margin-bottom: 4px; }}
+        div[class*="st-key-site_pick"] {{ margin-bottom: 4px; }}
         div[class*="st-key-pa_period_pick"] {{ margin-top: 18px; }}
         div[class*="st-key-period_pick"] .react-aria-ComboBox > div,
         div[class*="st-key-pa_period_pick"] .react-aria-ComboBox > div,
-        div[class*="st-key-basis_pick"] .react-aria-ComboBox > div {{
+        div[class*="st-key-basis_pick"] .react-aria-ComboBox > div,
+        div[class*="st-key-site_pick"] .react-aria-ComboBox > div {{
             background: {BRAND['navy']} !important;
             border: 1px solid {BRAND['navy']} !important;
             border-radius: 9px !important;
@@ -1347,12 +1336,14 @@ def inject_css():
         }}
         div[class*="st-key-period_pick"] .react-aria-ComboBox > div:hover,
         div[class*="st-key-pa_period_pick"] .react-aria-ComboBox > div:hover,
-        div[class*="st-key-basis_pick"] .react-aria-ComboBox > div:hover {{
+        div[class*="st-key-basis_pick"] .react-aria-ComboBox > div:hover,
+        div[class*="st-key-site_pick"] .react-aria-ComboBox > div:hover {{
             background: #1C2E48 !important;
         }}
         div[class*="st-key-period_pick"] .react-aria-ComboBox input,
         div[class*="st-key-pa_period_pick"] .react-aria-ComboBox input,
-        div[class*="st-key-basis_pick"] .react-aria-ComboBox input {{
+        div[class*="st-key-basis_pick"] .react-aria-ComboBox input,
+        div[class*="st-key-site_pick"] .react-aria-ComboBox input {{
             color: #FFFFFF !important;
             font-weight: 800 !important;
             font-size: 13px !important;
@@ -1361,12 +1352,14 @@ def inject_css():
         }}
         div[class*="st-key-period_pick"] .react-aria-ComboBox svg,
         div[class*="st-key-pa_period_pick"] .react-aria-ComboBox svg,
-        div[class*="st-key-basis_pick"] .react-aria-ComboBox svg {{
+        div[class*="st-key-basis_pick"] .react-aria-ComboBox svg,
+        div[class*="st-key-site_pick"] .react-aria-ComboBox svg {{
             fill: #FFFFFF !important; color: #FFFFFF !important;
         }}
         div[class*="st-key-period_pick"] .react-aria-ComboBox button,
         div[class*="st-key-pa_period_pick"] .react-aria-ComboBox button,
-        div[class*="st-key-basis_pick"] .react-aria-ComboBox button {{
+        div[class*="st-key-basis_pick"] .react-aria-ComboBox button,
+        div[class*="st-key-site_pick"] .react-aria-ComboBox button {{
             background: transparent !important;
         }}
 
