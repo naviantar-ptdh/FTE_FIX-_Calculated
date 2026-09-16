@@ -1997,6 +1997,109 @@ def render_unit_list_pa(plan_units, actual_units, sites):
     st.markdown(theme.unit_plan_actual_table(rows), unsafe_allow_html=True)
 
 
+def render_unit_list(units_map, sites):
+    """Daftar populasi unit satu sumber (Plan ATAU Actual)."""
+    rows = []
+    for s_ in sites:
+        for u in (units_map.get(s_) or []):
+            rows.append({"Site": s_, "Category": u.category,
+                         "Jenis Unit": u.jenis_unit,
+                         "Jumlah Unit": u.jumlah_unit, "PA": u.pa})
+    if not rows:
+        st.info("Tidak ada baris unit untuk cakupan ini.")
+        return
+    st.caption(f"{len(rows)} baris · total "
+               f"{sum(r['Jumlah Unit'] for r in rows):,.0f} unit")
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True, height=340)
+
+
+def render_manpower_need_mode(backend):
+    """Mode "Manpower Need" — gabungan Summary dan Basecase All Unit.
+
+    Kedua mode lama itu menampilkan dashboard yang sama; bedanya hanya
+    cakupan (seluruh site vs satu site). Jadi cakupan dijadikan filter, bukan
+    mode terpisah. Default "All Sites".
+
+    Filter kedua memilih SUMBER populasi unit — Plan (Sheet9) atau Actual
+    (tab 'Unit Actual Plan').
+    """
+    st.sidebar.markdown('<div class="dh-side-label">Filter</div>',
+                        unsafe_allow_html=True)
+    opsi = ["All Sites"] + list(backend.sites or [])
+    pilih = st.sidebar.selectbox("Site", options=opsi, index=0, key="mn_site")
+    with st.sidebar:
+        with st.container(key="mn_refresh"):
+            if st.button("Reload", width="stretch", key="mn_refresh_btn"):
+                _clear_caches()
+                get_units_actual.clear()
+                st.rerun()
+
+    st.markdown(
+        theme.header_band(
+            f"Manpower Need — {pilih}",
+            "Kebutuhan tenaga kerja berdasarkan populasi unit",
+            chips=[f"Site <b>{pilih}</b>"],
+        ),
+        unsafe_allow_html=True,
+    )
+
+    # Filter basis diletakkan DI BAWAH header, bukan di sampingnya: ia mengubah
+    # seluruh angka di halaman ini, jadi lebih tepat dibaca sebagai kontrol
+    # halaman daripada sebagai bagian dari judul.
+    fcol, _sisa = st.columns([1, 4], gap="small")
+    with fcol:
+        with st.container(key="basis_pick"):
+            basis = st.selectbox("Basis", ["Plan", "Actual"], index=0,
+                                 key="mn_basis", label_visibility="collapsed")
+
+    try:
+        units_all = get_units() if basis == "Plan" else get_units_actual()
+    except BackendDataError as exc:
+        st.error(f"Unit data ({basis}) failed to load: {exc}")
+        return
+
+    sites = list(backend.sites or []) if pilih == "All Sites" else [pilih]
+    with st.spinner("Calculating…"):
+        b = _compute_bundle(sites, units_all, backend)
+
+    summary, cost, staff = b["summary"], b["cost"], b["staff"]
+    if not summary["mechanic_by_category"]:
+        st.markdown(
+            theme.empty_state(
+                "Belum ada hasil",
+                f"Tidak ada site yang menghasilkan angka. Cek data unit pada "
+                f"sumber {basis}.", "\u26a0\ufe0f"),
+            unsafe_allow_html=True,
+        )
+        return
+
+    unit_qty = sum(d["jumlah_unit"] for d in summary["detail_rows"])
+    render_formula_panel(
+        formula_items(backend, unit_qty,
+                      site=None if pilih == "All Sites" else pilih),
+        summary["detail_rows"], with_site=(pilih == "All Sites"),
+        skipped=summary["skipped_units"],
+    )
+
+    ops_acc = {"operator": 0.0, "foreman": 0.0, "supervisor": 0.0,
+               "superintendent": 0.0}
+    seen = {k: False for k in ops_acc}
+    miss = []
+    for s_ in sites:
+        o = compute_operation_manpower(s_, units_all.get(s_) or [], backend)
+        for k in ops_acc:
+            if o.get(k) is not None:
+                ops_acc[k] += o[k]
+                seen[k] = True
+        for m in o.get("missing", []):
+            if m not in miss:
+                miss.append(m)
+    ops = {k: (ops_acc[k] if seen[k] else None) for k in ops_acc}
+    ops["missing"] = miss
+
+    render_dashboard_body(summary, cost, staff, ops, actual_for(backend, sites))
+
+
 def render_summary_mode(backend):
     refresh = render_summary_sidebar(backend)
 
@@ -2406,4 +2509,3 @@ def main():
 
 if __name__ == "__main__":
     main()
- 
