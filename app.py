@@ -1734,10 +1734,6 @@ def render_plan_actual_mode(backend):
     disandingkan — bukan sekadar membandingkan jumlah unit, supaya dampaknya
     ke manpower dan cost ikut kelihatan.
     """
-    st.sidebar.markdown('<div class="dh-side-label">Filter</div>',
-                        unsafe_allow_html=True)
-    opsi = ["All Sites"] + list(backend.sites or [])
-    pilih = st.sidebar.selectbox("Site", options=opsi, index=0, key="pa_site")
     with st.sidebar:
         with st.container(key="pa_refresh"):
             if st.button("Reload", width="stretch", key="pa_refresh_btn"):
@@ -1745,14 +1741,24 @@ def render_plan_actual_mode(backend):
                 get_units_actual.clear()
                 st.rerun()
 
+    # Filter site di AREA UTAMA, bukan sidebar — lihat catatan di
+    # render_manpower_need_mode: popover di sidebar terpotong tepi bawah.
+    pilih = st.session_state.get("pa_site", "All Sites")
     st.markdown(
         theme.header_band(
-            "Basecase — Plan vs Actual",
+            "Manpower Plan vs Actual",
             "Populasi unit rencana dibanding realisasi, beserta dampaknya",
             chips=[f"Site <b>{pilih}</b>"],
         ),
         unsafe_allow_html=True,
     )
+
+    f1, _sisa = st.columns([1, 4], gap="small")
+    with f1:
+        with st.container(key="site_pick"):
+            opsi = ["All Sites"] + list(backend.sites or [])
+            pilih = st.selectbox("Site", options=opsi, index=0, key="pa_site",
+                                 label_visibility="collapsed")
 
     try:
         plan_units = get_units()
@@ -2023,10 +2029,6 @@ def render_manpower_need_mode(backend):
     Filter kedua memilih SUMBER populasi unit — Plan (Sheet9) atau Actual
     (tab 'Unit Actual Plan').
     """
-    st.sidebar.markdown('<div class="dh-side-label">Filter</div>',
-                        unsafe_allow_html=True)
-    opsi = ["All Sites"] + list(backend.sites or [])
-    pilih = st.sidebar.selectbox("Site", options=opsi, index=0, key="mn_site")
     with st.sidebar:
         with st.container(key="mn_refresh"):
             if st.button("Reload", width="stretch", key="mn_refresh_btn"):
@@ -2034,6 +2036,12 @@ def render_manpower_need_mode(backend):
                 get_units_actual.clear()
                 st.rerun()
 
+    # Kedua filter ditaruh di AREA UTAMA, bukan sidebar. Di sidebar, daftar
+    # pilihan yang panjang terpotong tepi bawah panel dan pilihan terakhir
+    # (mis. SSCP) tidak bisa diklik — sidebar punya scroll sendiri sehingga
+    # popover-nya ikut terpotong. Di area utama ruangnya lega, sekaligus
+    # menaruh kedua kontrol yang mengubah seluruh angka halaman berdampingan.
+    pilih = st.session_state.get("mn_site", "All Sites")
     st.markdown(
         theme.header_band(
             f"Manpower Need — {pilih}",
@@ -2043,11 +2051,13 @@ def render_manpower_need_mode(backend):
         unsafe_allow_html=True,
     )
 
-    # Filter basis diletakkan DI BAWAH header, bukan di sampingnya: ia mengubah
-    # seluruh angka di halaman ini, jadi lebih tepat dibaca sebagai kontrol
-    # halaman daripada sebagai bagian dari judul.
-    fcol, _sisa = st.columns([1, 4], gap="small")
-    with fcol:
+    f1, f2, _sisa = st.columns([1, 1, 3], gap="small")
+    with f1:
+        with st.container(key="site_pick"):
+            opsi = ["All Sites"] + list(backend.sites or [])
+            pilih = st.selectbox("Site", options=opsi, index=0, key="mn_site",
+                                 label_visibility="collapsed")
+    with f2:
         with st.container(key="basis_pick"):
             basis = st.selectbox("Basis", ["Plan", "Actual"], index=0,
                                  key="mn_basis", label_visibility="collapsed")
