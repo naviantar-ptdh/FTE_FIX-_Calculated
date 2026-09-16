@@ -573,3 +573,66 @@ def simple_hbar(labels, values, color, height: int = 320,
         bargap=0.34,
     ))
     return fig
+
+
+# Gradasi navy untuk sisi PLAN, sepadan dengan gradasi oranye sisi ACTUAL.
+# Dipakai supaya kedua sisi dibaca sebagai "keluarga warna" yang berbeda,
+# tapi urutan tingkat di dalamnya tetap terbaca sama (pekat = tingkat atas).
+PLAN_SHADES = ["#0E1A2B", "#31527A", "#8AA5C2"]
+ACTUAL_SHADES = ["#D94E00", "#FF8A3D", "#FFC9A3"]
+
+
+def stacked_hbar(labels, series, colors, height: int = 340,
+                 xmax: float | None = None, money: bool = False,
+                 show_legend: bool = True) -> go.Figure:
+    """Batang mendatar BERTUMPUK dengan skala X yang bisa dipatok.
+
+    `series` = [(nama_segmen, [nilai per label]), ...]
+    `colors` = warna per segmen, urutannya sejajar `series`.
+
+    `xmax` dipatok dari pemanggil ketika dua grafik disandingkan (Plan di kiri,
+    Actual di kanan). Kalau tiap grafik memilih skalanya sendiri, batang kecil
+    bisa tampak sepanjang batang besar di sebelahnya.
+
+    Urutan label dipertahankan apa adanya (tidak di-sort) supaya baris Plan dan
+    Actual tetap sejajar ketika dibandingkan berdampingan.
+    """
+    totals = [sum(s[1][i] for s in series) for i in range(len(labels))]
+    if not labels or all(t == 0 for t in totals):
+        return _empty(height)
+    fmt = rp_short if money else num
+
+    fig = go.Figure()
+    for (name, vals), col in zip(series, colors):
+        fig.add_trace(go.Bar(
+            x=vals, y=labels, orientation="h", name=name,
+            marker=dict(color=col, line=dict(width=0)),
+            hovertext=[f"<b>{l}</b><br>{name}: {fmt(v)}" for l, v in zip(labels, vals)],
+            hovertemplate="%{hovertext}<extra></extra>",
+        ))
+    # Total ditulis di ujung batang: pada grafik bertumpuk, angka total tidak
+    # bisa dibaca dari panjang satu segmen mana pun.
+    fig.add_trace(go.Scatter(
+        x=totals, y=labels, mode="text",
+        text=[f"  {fmt(t)}" for t in totals],
+        textposition="middle right",
+        textfont=dict(family="Archivo", size=11, color=NEUTRAL["text"]),
+        hoverinfo="skip", showlegend=False, cliponaxis=False,
+    ))
+    fig.update_layout(**_layout(
+        height,
+        barmode="stack",
+        margin=dict(l=6, r=62, t=6, b=6 if not show_legend else 26),
+        xaxis=dict(visible=False, range=[0, xmax or max(totals) * 1.20]),
+        yaxis=dict(
+            tickfont=dict(family="Public Sans", size=11, color=NEUTRAL["text"]),
+            showgrid=False, ticksuffix="  ", autorange="reversed",
+        ),
+        bargap=0.34,
+        showlegend=show_legend,
+        legend=dict(orientation="h", yanchor="top", y=-0.02,
+                    xanchor="left", x=0,
+                    font=dict(family="Public Sans", size=10.5,
+                              color=NEUTRAL["text_muted"])),
+    ))
+    return fig
